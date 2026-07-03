@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>盖被子 · 军鼓摇篮</title>
+<title>盖被子 · 雪夜军鼓摇篮</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <style>
   html,body{margin:0;padding:0;background:#0a1424;height:100%;overflow:hidden}
@@ -13,191 +13,181 @@
 <script>
 // ============ 参数区 ============
 const W=720,H=1280;
-const T_WIND=2.5;      // 起风(冷)
-const T_COVER=4.2;     // 军鼓掀鼓皮盖被子
+const T_HUG=3.0;        // 抱在一起
+const T_COVER=5.0;      // 军鼓掀鼓皮盖被子
 const COVER_DUR=2.2;
-const T_SLEEP=7.5;     // 小人睡着
-const T_CALMWIND=8.5;  // 风渐停
-const WATER=980;
-const SNARE={x:330,y:872,rx:132,ry:25,h:96};
-const WIND_N=26;       // 风丝
-const PETAL_N=5;       // 飘过的花瓣
+const T_SLEEP=9.0;      // 睡着
+const SNOW_N=90;        // 雪花数
+const BREATH_EVERY=2.4; // 哈气间隔
+const GROUND=1005;      // 雪地线
+const SNARE={x:360,y:872,rx:132,ry:25,h:96};
 // ================================
-let S=1,t0=0,winds=[],petals=[],pondRings=[],fireflies=[];
-let bl1=0,bl2=0,nb1=2,nb2=3;
+let S=1,t0=0,snow=[],puffs=[],dust=[];
+let bl1=0,bl2=0,nb1=2,nb2=3,nextPuff=1.2,puffSide=1;
 
 function setup(){
   const s=min(windowWidth/W,windowHeight/H);S=s;
   createCanvas(W*s,H*s);frameRate(60);t0=millis()/1000;
-  randomSeed(9);
-  for(let i=0;i<WIND_N;i++)winds.push({y:random(200,930),sp:random(260,460),ph:random(1000),len:random(60,150)});
-  for(let i=0;i<PETAL_N;i++)petals.push({y0:random(300,860),sp:random(180,300),ph:random(1000),r:random(5,9),rot:random(TWO_PI)});
-  for(let i=0;i<3;i++)fireflies.push({x:random(120,620),y:random(560,940),ph:random(TWO_PI),ph2:random(TWO_PI)});
+  randomSeed(11);
+  for(let i=0;i<SNOW_N;i++)snow.push({x:random(W),y:random(H),r:random(1.6,4.2),
+    sp:random(28,70),ph:random(TWO_PI),sw:random(14,30)});
 }
 function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
-function mousePressed(){t0=millis()/1000;pondRings=[];}
+function mousePressed(){t0=millis()/1000;puffs=[];dust=[];}
 function ease(x){x=constrain(x,0,1);return x*x*(3-2*x);}
 function T(){return millis()/1000-t0;}
 
 function draw(){
   scale(S);
   const t=T(),dt=min(deltaTime/1000,0.05);
-  const wind=t<T_WIND?0:t<T_CALMWIND?ease((t-T_WIND)/1.2):max(0,1-ease((t-T_CALMWIND)/2.5));
+  const hug=ease((t-T_HUG)/1.4);
   const cover=ease((t-T_COVER)/COVER_DUR);
-  const bob=sin(t*0.9)*2.5, roll=sin(t*1.05)*2.6;
+  const asleep=t>T_SLEEP;
+  const bob=sin(t*0.9)*2, roll=sin(t*1.05)*2.2;   // 摇篮慢摇
 
-  // ---- 夜空 ----
-  for(let y=0;y<WATER;y+=6){const k=y/WATER;
-    stroke(lerpColor(color(9,18,38),color(15,36,54),k));strokeWeight(6);line(0,y,W,y);}
-  noStroke();fill(228,238,250,210);circle(150,140,56);
-  fill(lerpColor(color(9,18,38),color(15,30,50),0.4));circle(166,130,46);
-  // 星星
-  for(let i=0;i<26;i++){const sx=(i*97)%720,sy=(i*61)%460;
-    fill(210,225,245,150*(0.4+0.6*abs(sin(t*1.4+i))));circle(sx,sy,1.6+(i%3)*0.5);}
+  // ---- 冬夜 ----
+  for(let y=0;y<H;y+=6){const k=y/H;
+    stroke(lerpColor(color(8,16,34),color(16,32,52),k));strokeWeight(6);line(0,y,W,y);}
+  // 月亮(冷白)
+  noStroke();fill(226,234,248,60);circle(150,150,110+6*sin(t*0.8));
+  fill(230,238,250,225);circle(150,150,58);
+  fill(lerpColor(color(8,16,34),color(14,26,44),0.4));circle(167,140,47);
 
-  // ---- 池水 ----
-  drawPond(t,dt,wind);
-
-  // ---- 风(冷) ----
-  if(wind>0.02)drawWind(t,wind);
+  // ---- 雪地 ----
+  noStroke();fill(196,210,226);
+  rect(0,GROUND,W,H-GROUND);
+  fill(210,222,236);
+  ellipse(180,GROUND+8,340,44);ellipse(560,GROUND+14,380,54);
+  fill(178,194,214);rect(0,GROUND+90,W,H-GROUND-90);
 
   // ---- 军鼓摇篮 ----
   const pivY=SNARE.y+SNARE.h+12;
   push();translate(SNARE.x,pivY+bob);rotate(radians(roll));
   translate(-SNARE.x,-pivY);
   drawSnare(t);
-  drawSticks(t,dt,wind);
-  drawQuilt(t,cover);          // 鼓皮被子(盖在小人身上)
+  drawSticks(t,dt,hug,asleep,cover);
+  drawQuilt(t,cover,asleep);
   pop();
 
-  // ---- 萤火虫(风起吹走,风停回来) ----
-  const ffA=t<T_WIND?1:max(0,1-wind*1.4)+(t>T_CALMWIND+1?ease((t-T_CALMWIND-1)/2):0);
-  if(ffA>0.03)for(const f of fireflies){
-    f.x+=sin(t*0.7+f.ph)*0.8;f.y+=cos(t*0.5+f.ph2)*0.6;
-    const gl=(0.5+0.5*sin(t*2.2+f.ph))*min(ffA,1);
-    noStroke();fill(255,235,140,38*gl);circle(f.x,f.y,24);
-    fill(255,245,180,210*gl);circle(f.x,f.y,6);}
-}
-
-// ---------------- 池塘 ----------------
-function drawPond(t,dt,wind){
-  for(let y=WATER;y<H;y+=6){const k=(y-WATER)/(H-WATER);
-    stroke(lerpColor(color(12,40,52),color(6,20,30),k));strokeWeight(6);line(0,y,W,y);}
-  stroke(210,226,244,60);
-  for(let i=0;i<7;i++){const yy=WATER+26+i*20;
-    const wob=sin(t*(1.6+wind*2)+i*1.3)*(10+wind*8);
-    strokeWeight(3);line(150-24+wob,yy,150+24+wob*0.6,yy);}
-  noStroke();fill(60,40,32,50);ellipse(SNARE.x,WATER+60,SNARE.rx*1.9,40);
-  // 波光(风大流速快)
-  stroke(150,190,200,26+wind*30);strokeWeight(2);
-  for(let i=0;i<9;i++){const yy=WATER+14+i*26;
-    const ph=t*(14+i*3)*(1+wind*2.5);
-    line((ph%800)-60,yy,(ph%800)+30+wind*30,yy);}
-  // 风掠水面的圈
-  if(wind>0.3&&random()<0.05*wind)pondRings.push({x:random(60,660),y:random(WATER+16,1150),age:0});
-  pondRings=pondRings.filter(r=>{r.age+=dt;return r.age<1.2;});
-  noFill();
-  for(const r of pondRings){const k=r.age/1.2;
-    stroke(190,220,235,120*(1-k));strokeWeight(1.5);
-    ellipse(r.x,r.y,(6+56*ease(k))*2,(6+56*ease(k))*0.5);}
-}
-
-// ---------------- 风与花瓣 ----------------
-function drawWind(t,wind){
-  noFill();
-  for(const w of winds){
-    const x=W+80-((t*w.sp+w.ph)% (W+300));
-    stroke(190,215,235,34*wind);strokeWeight(1.6);
-    bezier(x,w.y, x-w.len*0.4,w.y-8, x-w.len*0.7,w.y+6, x-w.len,w.y-3);
+  // ---- 哈气(冷,盖上被子前) ----
+  if(t>0.8 && t<T_COVER+0.6 && t>nextPuff){
+    nextPuff=t+BREATH_EVERY*random(0.8,1.2);puffSide*=-1;
+    puffs.push({x:SNARE.x+puffSide*34,y:SNARE.y-96,age:0,side:puffSide});
   }
+  puffs=puffs.filter(p=>{p.age+=dt;return p.age<1.6;});
+  for(const p of puffs){const k=p.age/1.6;
+    noStroke();fill(226,236,248,120*(1-k));
+    ellipse(p.x+p.side*18*k, p.y-34*k, 16+26*k, 12+16*k);}
+
+  // ---- 雪 ----
   noStroke();
-  for(const p of petals){
-    const x=W+40-((t*p.sp+p.ph)%(W+200));
-    const y=p.y0+sin(t*2+p.ph)*26;
-    push();translate(x,y);rotate(p.rot+t*2);
-    fill(226,182,196,190*wind);ellipse(0,0,p.r*2,p.r*1.1);pop();
+  for(const f of snow){
+    f.y+=f.sp*dt;
+    const x=f.x+sin(t*0.8+f.ph)*f.sw;
+    fill(232,240,250,200*(f.r/4.2));circle(x,f.y,f.r*2);
+    if(f.y>H+10){f.y=-10;f.x=random(W);}
   }
+  // 被子上积的雪
+  if(cover>=1 && dust.length<26 && random()<0.04)
+    dust.push({u:random(-0.75,0.75),age:0});
+  for(const d of dust){d.age+=dt;
+    noStroke();fill(238,244,252,min(200,d.age*90));
+    const px=SNARE.x+d.u*SNARE.rx*0.9;
+    circle(px,quiltFrontY(T(),cover)-8+3*sin(d.u*7),3.4);}
 }
 
-// ---------------- 军鼓 ----------------
+// ---------------- 军鼓(雪夜的摇篮) ----------------
 function drawSnare(t){
   const {x,y,rx,ry,h}=SNARE;
   noStroke();
-  fill(122,66,44);rect(x-rx,y,rx*2,h);ellipse(x,y+h,rx*2,ry*2);
-  fill(140,80,54);rect(x-rx,y,rx*2,h*0.45);
-  fill(196,186,170);
+  fill(112,60,40);rect(x-rx,y,rx*2,h);
+  ellipse(x,y+h,rx*2,ry*2);
+  fill(130,74,50);rect(x-rx,y,rx*2,h*0.45);
+  fill(186,178,164);
   for(let i=0;i<6;i++){const lx=x-rx+12+(i/5)*(rx*2-24);rect(lx-3,y+10,6,h-16,3);}
-  noFill();stroke(214,206,190);strokeWeight(10);
+  noFill();stroke(206,200,186);strokeWeight(10);
   arc(x,y+h,rx*2+6,ry*2+6,0.08,PI-0.08);
   ellipse(x,y,rx*2+6,ry*2+6);
-  noStroke();fill(236,230,214);ellipse(x,y,rx*2,ry*2);
-  noFill();stroke(180,172,156);strokeWeight(2);ellipse(x,y,rx*1.7,ry*1.7);
-  noStroke();fill(12,40,52,150);ellipse(x,y+h+4,rx*2+16,ry*2+10);
+  noStroke();fill(232,228,214);ellipse(x,y,rx*2,ry*2);
+  noFill();stroke(176,170,156);strokeWeight(2);ellipse(x,y,rx*1.7,ry*1.7);
+  // 箍沿积雪
+  noStroke();fill(240,246,252);
+  arc(x,y-2,rx*2+8,ry*2+8,PI+0.35,TWO_PI-0.35,CHORD);
+  // 底部雪窝
+  fill(216,228,240);ellipse(x,y+h+8,rx*2+40,26);
 }
 
-// ---------------- 鼓棒小人 ----------------
-function drawSticks(t,dt,wind){
+// ---------------- 鼓棒小人(坐着,靠拥抱取暖) ----------------
+function drawSticks(t,dt,hug,asleep,cover){
   if(t>nb1){bl1=0.12;nb1=t+random(1.8,4);}if(t>nb2){bl2=0.12;nb2=t+random(1.8,4);}
   bl1=max(0,bl1-dt);bl2=max(0,bl2-dt);
-  const asleep=t>T_SLEEP;
-  const shiver=(wind>0.2&&t<T_COVER+1)?sin(t*26)*2.2*wind:0;   // 冷得发抖
-  const hug=ease((t-(T_WIND+0.6))/0.9);
-  const br=asleep?sin(t*1.3)*2:sin(t*2.0)*1.3;
-  const y0=SNARE.y-10;
-  push();translate(SNARE.x-62+hug*18+shiver,y0+br*0.5);rotate(radians(4));
-  stickCute(t,bl1,asleep,1);pop();
-  push();translate(SNARE.x+62-hug*18-shiver,y0+br*0.6+1);rotate(radians(-4));
-  stickCute(t,bl2,asleep,-1);pop();
-  if(asleep){const k=(t%2.4)/2.4;noStroke();fill(220,232,250,170*(1-k));
-    textSize(13+8*k);text('z',SNARE.x+6+k*18,y0-46-k*26);}
+  const br=asleep?sin(t*1.3)*2:sin(t*2.0)*1.4;         // 同步呼吸(慢)
+  const y0=SNARE.y-4;
+  const gap=lerp(46,20,hug);                            // 靠近
+  const lean=lerp(4,15,hug);                            // 相互倾斜,头挨头
+  // 左边这根
+  push();translate(SNARE.x-gap,y0+br*0.4);rotate(radians(lean));
+  sittingStick(t,bl1,asleep,1,hug);pop();
+  // 右边这根
+  push();translate(SNARE.x+gap,y0+br*0.5+0.5);rotate(radians(-lean));
+  sittingStick(t,bl2,asleep,-1,hug);pop();
+  if(asleep){const k=(t%2.4)/2.4;noStroke();fill(222,232,248,170*(1-k));
+    textSize(13+8*k);text('z',SNARE.x+58+k*18,y0-118-k*26);}
 }
-function stickCute(t,blink,asleep,side){
-  const L=96;
-  noStroke();fill(150,108,74);
-  beginShape();vertex(-L*0.5*side,-6);vertex(L*0.38*side,-4.6);vertex(L*0.38*side,4.6);vertex(-L*0.5*side,6);endShape(CLOSE);
-  fill(216,172,126);
-  beginShape();vertex(-L*0.5*side,-4.4);vertex(L*0.38*side,-3.4);vertex(L*0.38*side,3.4);vertex(-L*0.5*side,4.4);endShape(CLOSE);
-  fill(218,174,128);ellipse(L*0.46*side,-1,22,20);
-  fill(242,208,162);ellipse(L*0.43*side,-5,10,7);
-  const ex=L*0.46*side,ey=-1;
+function sittingStick(t,blink,asleep,side,hug){
+  const L=104; // 站高
+  // 身体:立着的小棒(微收锥),原点在脚底
+  noStroke();fill(140,100,68);
+  beginShape();vertex(-7.5,0);vertex(-5.5,-L);vertex(5.5,-L);vertex(7.5,0);endShape(CLOSE);
+  fill(210,166,120);
+  beginShape();vertex(-5.8,0);vertex(-4.2,-L);vertex(4.2,-L);vertex(5.8,0);endShape(CLOSE);
+  fill(236,202,156);rect(-1.5,-L+8,2.4,L-16,2);
+  // 头:圆珠
+  fill(214,170,124);ellipse(0,-L-9,23,21);
+  fill(240,206,160);ellipse(-3,-L-13,10,7);
+  // 小手臂:环抱对方(hug 后出现)
+  if(hug>0.4){
+    noFill();stroke(210,166,120);strokeWeight(5);strokeCap(ROUND);
+    const reach=(hug-0.4)/0.6;
+    arc(side*10,-L*0.62, 34*reach,20, side>0?-0.5:PI-0.5, side>0?1.2:PI+1.2);
+  }
+  // 脸(朝向对方)
+  const ex=side*3.5,ey=-L-9;
   if(asleep){stroke(96,66,44);strokeWeight(2.2);noFill();
-    arc(ex-4.5,ey,6,4.5,0.15,PI-0.15);arc(ex+4.5,ey,6,4.5,0.15,PI-0.15);
+    arc(ex-4,ey,6,4.5,0.15,PI-0.15);arc(ex+4,ey,6,4.5,0.15,PI-0.15);
   }else{const b=blink>0?0.12:1;noStroke();
-    fill(60,42,30);ellipse(ex-4.5,ey,5.4,5.4*b);ellipse(ex+4.5,ey,5.4,5.4*b);
-    if(b>0.5){fill(255,255,255,230);circle(ex-3.4,ey-1.4,1.8);circle(ex+5.6,ey-1.4,1.8);}}
-  noStroke();fill(236,150,118,120);ellipse(ex-9,ey+4,5.5,3.5);ellipse(ex+9,ey+4,5.5,3.5);
+    fill(60,42,30);ellipse(ex-4,ey,5,5*b);ellipse(ex+4,ey,5,5*b);
+    if(b>0.5){fill(255,255,255,230);circle(ex-3,ey-1.4,1.7);circle(ex+5,ey-1.4,1.7);}}
+  noStroke();fill(238,152,120,130);ellipse(ex-8.5,ey+4,5.5,3.5);ellipse(ex+8.5,ey+4,5.5,3.5);
 }
 
 // ---------------- 鼓皮被子 ----------------
-// cover: 0=平贴鼓面(看不见) → 掀起、鼓风、落下盖到下巴
-function drawQuilt(t,cover){
+function quiltFrontY(t,cover){
+  return lerp(SNARE.y-SNARE.ry, SNARE.y-52, ease(cover)) + (cover>=1?sin(t*1.3)*2.2:0);
+}
+function drawQuilt(t,cover,asleep){
   if(cover<=0.01)return;
   const {x,y,rx,ry}=SNARE;
-  const lift=sin(PI*min(cover,1))*54;                 // 空中鼓起
-  const frontY=lerp(y-ry, y+18, ease(cover)) + (cover>=1?sin(t*1.3)*2.4:0); // 前沿(盖到下巴)+呼吸
-  const sag=10+6*sin(t*1.1);
-  // 被子面
-  noStroke();fill(240,232,212);
+  const lift=sin(PI*min(cover,1))*56;
+  const frontY=quiltFrontY(t,cover);
+  const sag=7+4*sin(t*1.1);
+  noStroke();fill(238,230,210);
   beginShape();
-  // 后沿:沿鼓面远侧弧
   for(let i=0;i<=20;i++){const a=PI+i/20*PI;
     vertex(x+rx*0.96*cos(a), y+ry*0.96*sin(a)-lift*0.5);}
-  // 前沿:波浪软边
   for(let i=0;i<=20;i++){const s=1-i/20;
     const px=x+rx*0.96*(2*s-1);
     const py=frontY+sag*sin(PI*s)+3*sin(3*PI*s+t*2)-lift*0.2;
     vertex(px,py);}
   endShape(CLOSE);
-  // 前沿包边(被角)
-  noFill();stroke(214,200,172);strokeWeight(5);
+  noFill();stroke(212,198,170);strokeWeight(5);
   beginShape();
   for(let i=0;i<=20;i++){const s=1-i/20;
     const px=x+rx*0.96*(2*s-1);
     const py=frontY+sag*sin(PI*s)+3*sin(3*PI*s+t*2)-lift*0.2;
     vertex(px,py);}
   endShape();
-  // 缝线(被子的针脚,让它读作"被子"而不是布)
-  stroke(196,182,156,140);strokeWeight(1.6);
+  stroke(194,180,154,140);strokeWeight(1.6);
   for(let r0=0.35;r0<=0.75;r0+=0.2){
     beginShape();
     for(let i=0;i<=16;i++){const a=PI+i/16*PI;
