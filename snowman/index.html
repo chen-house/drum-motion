@@ -67,11 +67,10 @@ function draw(){
   // ---- 雪原 ----
   drawField(t);
 
-  // ---- 小家伙(两根立在雪里的鼓棒) ----
-  drawLittles(t,dt,pulse);
-
-  // ---- 雪球→雪人 ----
-  drawSnowman(t,dt,pulse);
+  // ---- 绘制顺序:抱起前小家伙在雪里(雪人后画);抱起后小家伙在怀里(最上层) ----
+  const picked=t>T_PICK+0.3;
+  if(!picked){drawLittles(t,dt,pulse);drawSnowman(t,dt,pulse);}
+  else{drawSnowman(t,dt,pulse);drawLittles(t,dt,pulse);}
 
   // ---- 心跳暖光(压在雪人身上,罩住怀里) ----
   if(beatOn){
@@ -107,14 +106,24 @@ function drawField(t){
   // 雪地闪光
   for(const s of sparks){const a=0.25+0.75*abs(sin(t*1.8+s.ph));
     fill(255,255,255,140*a);circle(s.x,s.y,2.2);}
-  // 雪球滚痕(从右侧进来,到停点)
+  // 雪球滚痕(贴在雪面上的浅沟,软边)
   const t2=T();
   if(t2>T_ROLL){
-    const prog=ease((t2-T_ROLL)/(T_STOP-T_ROLL));
+    const prog=ease(constrain((t2-T_ROLL)/(T_STOP-T_ROLL),0,1));
     const bx=lerp(W+140,SM.x,prog);
-    noStroke();fill(132,152,186,180);
-    rect(bx,HORIZON+34,W+160-bx,26,13);
-    fill(120,140,174,120);rect(bx,HORIZON+52,W+160-bx,10,5);
+    noStroke();
+    for(let gx=bx;gx<W+60;gx+=26){
+      const k=(gx-bx)/(W+60-bx+1);
+      fill(150,168,200,120);ellipse(gx,HORIZON+56+8*sin(gx*0.05),34,12);
+      fill(178,194,220,90);ellipse(gx,HORIZON+50+8*sin(gx*0.05),30,7);
+    }
+  }
+  // 雪人脚下的影子窝
+  if(t2>T_ROLL){
+    const prog=ease(constrain((t2-T_ROLL)/(T_STOP-T_ROLL),0,1));
+    const sx=lerp(W+140,SM.x,prog);
+    fill(122,142,178,130);ellipse(sx,HORIZON+58,SM.r*2.1,30);
+    fill(160,178,206,110);ellipse(sx,HORIZON+52,SM.r*1.7,18);
   }
 }
 
@@ -213,7 +222,7 @@ function drawSnowman(t,dt,pulse){
   if(t<T_STOP)theta-=( (lerp(W+140,SM.x,ease(constrain((t+dt-T_ROLL)/(T_STOP-T_ROLL),0,1)))-x) )/r;
   const bump=(t<T_STOP)?abs(sin(theta*1.5))*5*(1-prog*0.5):0;
   const wake=ease((t-T_WAKE)/1.0);
-  const y=HORIZON-r+6-bump;
+  const y=HORIZON-r+6-bump+wake*22;   // 现形后往雪里沉一点,站得实
   const sway=(t>T_HELD)?sin(t*0.9)*1.2:0;
 
   push();translate(x,y);rotate(radians(sway));
@@ -228,8 +237,8 @@ function drawSnowman(t,dt,pulse){
     pop();
   }
   if(wake>0){ // 现形:大鼓雪人(达摩式,一体)
-    // 抖雪
-    if(burst.length===0&&t>T_WAKE)for(let i=0;i<10;i++)
+    // 抖雪(只在现形瞬间一次)
+    if(burst.length===0&&t>T_WAKE&&t<T_WAKE+0.25)for(let i=0;i<10;i++)
       burst.push({a:random(TWO_PI),sp:random(60,160),age:0});
     // 鼓壳(外圈)
     noStroke();fill(150,150+wake*0,150,0); // 占位
