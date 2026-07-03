@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>雪人的心跳</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#0a1128;height:100%;overflow:hidden}
+  canvas{display:block;margin:0 auto}
+</style>
+</head>
+<body>
+<script>
+// ================= 参数区 =================
+const W=720,H=1280;
+const T_ROLL=2.8;      // 雪球入场
+const T_STOP=5.6;      // 停下
+const T_WAKE=6.2;      // 抖雪现形(大鼓雪人)
+const T_PICK=7.4;      // 弯腰捞小家伙
+const T_HELD=9.0;      // 抱稳
+const T_BEAT=9.6;      // 心跳开始
+const T_SLEEP=13.5;    // 小家伙睡着
+const BEAT_PERIOD=1.15;// 心跳间隔(秒)
+const SNOW_NEAR=14, SNOW_MID=30, SNOW_FAR=46; // 三层雪
+const HORIZON=880;     // 雪原地平线
+// 雪人
+const SM={x:500, r:120};          // 停点与身体半径
+const STICK_L=270, STICK_R=330;   // 两根小鼓棒立雪处
+// ==========================================
+let S=1,t0=0,theta=0,lastT=0;
+let near=[],mid=[],far=[],sparks=[],puffs=[],burst=[];
+let bl1=0,bl2=0,nb1=2,nb2=3,nextPuff=1.0,puffSide=1;
+
+function setup(){
+  const s=min(windowWidth/W,windowHeight/H);S=s;
+  createCanvas(W*s,H*s);frameRate(60);reset();
+}
+function reset(){
+  t0=millis()/1000;theta=0;lastT=0;puffs=[];burst=[];
+  near=[];mid=[];far=[];sparks=[];
+  randomSeed(7);
+  for(let i=0;i<SNOW_NEAR;i++)near.push({x:random(W),y:random(H),sp:random(60,90),rot:random(TWO_PI),vr:random(-0.6,0.6),s:random(9,14),sw:random(20,34),ph:random(TWO_PI)});
+  for(let i=0;i<SNOW_MID;i++)mid.push({x:random(W),y:random(H),sp:random(36,60),s:random(3,5),sw:random(12,22),ph:random(TWO_PI)});
+  for(let i=0;i<SNOW_FAR;i++)far.push({x:random(W),y:random(H),sp:random(18,34),s:random(1.2,2.4),sw:random(6,14),ph:random(TWO_PI)});
+  for(let i=0;i<46;i++)sparks.push({x:random(W),y:random(HORIZON+10,H-10),ph:random(TWO_PI)});
+}
+function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
+function mousePressed(){reset();}
+function ease(x){x=constrain(x,0,1);return x*x*(3-2*x);}
+function T(){return millis()/1000-t0;}
+
+function draw(){
+  scale(S);
+  const t=T(),dt=min(deltaTime/1000,0.05);
+  const beatOn=t>T_BEAT;
+  const beatPh=beatOn?((t-T_BEAT)%BEAT_PERIOD)/BEAT_PERIOD:1;
+  const pulse=beatOn?exp(-4.5*beatPh):0;   // 每跳一下的衰减脉冲
+
+  // ---- 冷夜(唯一的暖色留给心跳) ----
+  for(let y=0;y<H;y+=6){const k=y/H;
+    stroke(lerpColor(color(9,15,36),color(20,36,66),k));strokeWeight(6);line(0,y,W,y);}
+  // 低月
+  noStroke();fill(214,226,246,26);circle(560,250,300+16*sin(t*0.5));
+  fill(220,230,248,40);circle(560,250,190);
+  fill(226,236,250,235);circle(560,250,120);
+  fill(198,212,238,255);circle(590,236,26);circle(536,282,15);circle(566,300,9); // 月斑
+  // ---- 雪原 ----
+  drawField(t);
+
+  // ---- 小家伙(两根立在雪里的鼓棒) ----
+  drawLittles(t,dt,pulse);
+
+  // ---- 雪球→雪人 ----
+  drawSnowman(t,dt,pulse);
+
+  // ---- 心跳暖光(压在雪人身上,罩住怀里) ----
+  if(beatOn){
+    const cx=SM.x,cy=HORIZON-SM.r*0.95;
+    for(let k2=0;k2<3;k2++){
+      const rr=40+240*beatPh+k2*8;
+      noFill();stroke(255,196,120,90*pulse/(k2+1));strokeWeight(3-k2*0.8);
+      circle(cx,cy,rr*2);
+    }
+    noStroke();fill(255,190,110,26*pulse);circle(cx,cy,300);
+  }
+
+  // ---- 雪(三层,近景有六瓣晶形) ----
+  drawSnow(t,dt,pulse);
+
+  // ---- 哈气(获救前) ----
+  if(t>0.8&&t<T_PICK&&t>nextPuff){nextPuff=t+2.2*random(0.8,1.2);puffSide*=-1;
+    puffs.push({x:(STICK_L+STICK_R)/2+puffSide*26,y:HORIZON-120,age:0,side:puffSide});}
+  puffs=puffs.filter(p=>{p.age+=dt;return p.age<1.5;});
+  for(const p of puffs){const k=p.age/1.5;
+    noStroke();fill(222,232,248,110*(1-k));
+    ellipse(p.x+p.side*16*k,p.y-30*k,14+22*k,10+14*k);}
+}
+
+// ---------------- 雪原 ----------------
+function drawField(t){
+  noStroke();
+  fill(150,168,198);rect(0,HORIZON,W,H-HORIZON);
+  fill(172,190,216);ellipse(160,HORIZON+30,520,90);ellipse(620,HORIZON+16,460,70);
+  fill(198,214,236);ellipse(360,HORIZON+80,860,140);
+  fill(214,228,244);rect(0,HORIZON+120,W,H);
+  ellipse(200,HORIZON+130,560,90);ellipse(600,HORIZON+150,520,100);
+  // 雪地闪光
+  for(const s of sparks){const a=0.25+0.75*abs(sin(t*1.8+s.ph));
+    fill(255,255,255,140*a);circle(s.x,s.y,2.2);}
+  // 雪球滚痕(从右侧进来,到停点)
+  const t2=T();
+  if(t2>T_ROLL){
+    const prog=ease((t2-T_ROLL)/(T_STOP-T_ROLL));
+    const bx=lerp(W+140,SM.x,prog);
+    noStroke();fill(132,152,186,180);
+    rect(bx,HORIZON+34,W+160-bx,26,13);
+    fill(120,140,174,120);rect(bx,HORIZON+52,W+160-bx,10,5);
+  }
+}
+
+// ---------------- 雪(三层) ----------------
+function flake(x,y,s,rot,al){
+  push();translate(x,y);rotate(rot);
+  stroke(236,244,254,al);strokeWeight(1.6);noFill();
+  for(let k=0;k<6;k++){
+    const a=k*PI/3;
+    const ex=cos(a)*s,ey=sin(a)*s;
+    line(0,0,ex,ey);
+    line(ex*0.55,ey*0.55, ex*0.55+cos(a+0.9)*s*0.3, ey*0.55+sin(a+0.9)*s*0.3);
+    line(ex*0.55,ey*0.55, ex*0.55+cos(a-0.9)*s*0.3, ey*0.55+sin(a-0.9)*s*0.3);
+  }
+  pop();
+}
+function drawSnow(t,dt,pulse){
+  noStroke();
+  for(const f of far){f.y+=f.sp*dt;
+    fill(220,232,248,150);circle(f.x+sin(t*0.6+f.ph)*f.sw,f.y,f.s*2);
+    if(f.y>H+8){f.y=-8;f.x=random(W);}}
+  for(const f of mid){f.y+=f.sp*dt;
+    fill(230,240,252,190);circle(f.x+sin(t*0.7+f.ph)*f.sw,f.y,f.s*2);
+    if(f.y>H+8){f.y=-8;f.x=random(W);}}
+  for(const f of near){f.y+=f.sp*dt;f.rot+=f.vr*dt;
+    const x=f.x+sin(t*0.8+f.ph)*f.sw;
+    // 心跳暖光里的雪花被染金、放慢
+    const d=dist(x,f.y,SM.x,HORIZON-SM.r);
+    if(pulse>0.2&&d<200){f.y-=f.sp*dt*0.5;
+      push();stroke(255,208,140,220);flakeGold(x,f.y,f.s,f.rot);pop();}
+    else flake(x,f.y,f.s,f.rot,225);
+    if(f.y>H+16){f.y=-16;f.x=random(W);}}
+}
+function flakeGold(x,y,s,rot){
+  push();translate(x,y);rotate(rot);
+  stroke(255,208,140,230);strokeWeight(1.8);noFill();
+  for(let k=0;k<6;k++){const a=k*PI/3;line(0,0,cos(a)*s,sin(a)*s);}
+  pop();
+}
+
+// ---------------- 小家伙 ----------------
+function drawLittles(t,dt,pulse){
+  if(t>nb1){bl1=0.12;nb1=t+random(1.8,4);}if(t>nb2){bl2=0.12;nb2=t+random(1.8,4);}
+  bl1=max(0,bl1-dt);bl2=max(0,bl2-dt);
+  const asleep=t>T_SLEEP;
+  const pick=ease((t-T_PICK)/(T_HELD-T_PICK));
+  const br=asleep?sin(t*1.3)*2:sin(t*2.1)*1.4;
+  // 从立雪处 → 雪人怀里
+  const chestX=SM.x, chestY=HORIZON-SM.r*0.92;
+  const lx=lerp(STICK_L,chestX-19,pick), rx=lerp(STICK_R,chestX+19,pick);
+  const ly=lerp(HORIZON+6,chestY+34,pick), ry=lerp(HORIZON+6,chestY+34,pick);
+  const lean=lerp(10,6,pick);
+  const buried=lerp(0.24,0,pick);          // 立雪时下三分之一埋着
+  push();translate(lx,ly+br*0.4);rotate(radians(lean));
+  little(t,bl1,asleep,1,buried,pulse);pop();
+  push();translate(rx,ry+br*0.5+0.5);rotate(radians(-lean));
+  little(t,bl2,asleep,-1,buried,pulse);pop();
+  // 包裹带(抱稳后,白鼓皮裹成蜡烛包)
+  if(pick>0.85){
+    const wr=ease((t-T_HELD)/0.8);
+    noStroke();fill(240,244,250,235*wr);
+    rect(chestX-46,chestY+8,92,52,24);
+    fill(226,232,242,235*wr);rect(chestX-46,chestY+30,92,10,5);
+    noFill();stroke(208,216,230,200*wr);strokeWeight(2);
+    rect(chestX-46,chestY+8,92,52,24);
+  }
+  if(asleep){const k=(t%2.4)/2.4;noStroke();fill(226,236,250,180*(1-k));
+    textSize(13+8*k);text('z',chestX+56+k*18,chestY-46-k*24);}
+}
+function little(t,blink,asleep,side,buried,pulse){
+  const L=96*(1-buried);
+  noStroke();fill(140,100,68);
+  beginShape();vertex(-7,0);vertex(-5,-L);vertex(5,-L);vertex(7,0);endShape(CLOSE);
+  fill(210,166,120);
+  beginShape();vertex(-5.4,0);vertex(-3.8,-L);vertex(3.8,-L);vertex(5.4,0);endShape(CLOSE);
+  fill(214,170,124);ellipse(0,-L-9,22,20);
+  fill(240,206,160);ellipse(-3,-L-13,10,7);
+  const ex=side*3,ey=-L-9;
+  if(asleep){stroke(96,66,44);strokeWeight(2.2);noFill();
+    arc(ex-4,ey,6,4.5,0.15,PI-0.15);arc(ex+4,ey,6,4.5,0.15,PI-0.15);
+  }else{const b=blink>0?0.12:1;noStroke();
+    fill(60,42,30);ellipse(ex-4,ey,5,5*b);ellipse(ex+4,ey,5,5*b);
+    if(b>0.5){fill(255,255,255,230);circle(ex-3,ey-1.3,1.6);circle(ex+5,ey-1.3,1.6);}}
+  // 腮红:心跳后一拍一拍回暖
+  const warm=constrain(0.5+pulse*0.8,0.5,1.3);
+  noStroke();fill(238,146,116,120*warm);
+  ellipse(ex-8,ey+4,5.5,3.5);ellipse(ex+8,ey+4,5.5,3.5);
+}
+
+// ---------------- 雪球 → 大鼓雪人 ----------------
+function drawSnowman(t,dt,pulse){
+  if(t<T_ROLL)return;
+  const prog=ease(constrain((t-T_ROLL)/(T_STOP-T_ROLL),0,1));
+  const x=lerp(W+140,SM.x,prog);
+  const r=lerp(52,SM.r,prog);
+  if(t<T_STOP)theta-=( (lerp(W+140,SM.x,ease(constrain((t+dt-T_ROLL)/(T_STOP-T_ROLL),0,1)))-x) )/r;
+  const bump=(t<T_STOP)?abs(sin(theta*1.5))*5*(1-prog*0.5):0;
+  const wake=ease((t-T_WAKE)/1.0);
+  const y=HORIZON-r+6-bump;
+  const sway=(t>T_HELD)?sin(t*0.9)*1.2:0;
+
+  push();translate(x,y);rotate(radians(sway));
+  if(wake<1){ // 滚动的雪球
+    push();rotate(theta);
+    noStroke();fill(228,236,248);circle(0,0,r*2);
+    fill(214,226,242);circle(-r*0.3,-r*0.25,r*0.9);
+    noFill();stroke(202,216,236);strokeWeight(3);
+    arc(0,0,r*1.4,r*1.4,0.4,2.2);arc(0,0,r*0.8,r*0.8,PI,PI+1.8);
+    noStroke();fill(240,246,252);
+    circle(r*0.45,r*0.2,10);circle(-r*0.5,r*0.35,8);circle(r*0.1,-r*0.55,9);
+    pop();
+  }
+  if(wake>0){ // 现形:大鼓雪人(达摩式,一体)
+    // 抖雪
+    if(burst.length===0&&t>T_WAKE)for(let i=0;i<10;i++)
+      burst.push({a:random(TWO_PI),sp:random(60,160),age:0});
+    // 鼓壳(外圈)
+    noStroke();fill(150,150+wake*0,150,0); // 占位
+    fill(216,226,240,255*wake);circle(0,0,r*2.06);
+    fill(126,74,50,255*wake);circle(0,0,r*2.0);
+    // 白鼓皮(脸+身)
+    fill(238,242,248,255*wake);circle(0,0,r*1.78);
+    // 箍上的调音耳(雪人的"扣子"一圈)
+    fill(196,206,222,255*wake);
+    for(let k=0;k<8;k++){const a=k*TWO_PI/8+0.4;
+      circle(cos(a)*r*0.94,sin(a)*r*0.94,9);}
+    // 煤眼(温柔地看着怀里)
+    fill(52,54,64,255*wake);
+    ellipse(-r*0.22,-r*0.3,13,14);ellipse(r*0.22,-r*0.3,13,14);
+    fill(255,255,255,230*wake);circle(-r*0.19,-r*0.34,4);circle(r*0.25,-r*0.34,4);
+    // 煤扣子
+    fill(52,54,64,220*wake);circle(0,r*0.28,8);circle(0,r*0.52,7);
+    // 心口:心跳时亮
+    if(pulse>0){noStroke();fill(255,186,100,150*pulse);circle(0,-r*0.02,40+30*pulse);}
+    // 鼓棒手臂(它的手臂本来就是鼓棒)
+    const hold=ease((t-T_PICK)/(T_HELD-T_PICK));
+    stroke(150,104,64,255*wake);strokeWeight(9);strokeCap(ROUND);
+    const aL=lerp(-2.6,-2.0,hold), aR=lerp(-0.5,-1.1,hold);
+    line(-r*0.85,0, -r*0.85+cos(aL)*r*0.75, sin(aL)*r*0.75+r*0.3);
+    line( r*0.85,0,  r*0.85+cos(aR)*r*0.75, sin(aR)*r*0.75+r*0.3);
+    noStroke();fill(206,160,110,255*wake);
+    circle(-r*0.85+cos(aL)*r*0.75, sin(aL)*r*0.75+r*0.3, 15);
+    circle( r*0.85+cos(aR)*r*0.75, sin(aR)*r*0.75+r*0.3, 15);
+    // 镲片帽(歪戴)
+    push();translate(r*0.12,-r*1.02);rotate(radians(-10+2*sin(t*1.1)));
+    fill(206,172,104,255*wake);ellipse(0,0,r*0.95,r*0.28);
+    fill(226,196,128,255*wake);ellipse(0,-4,r*0.6,r*0.18);
+    fill(184,148,86,255*wake);ellipse(0,-8,r*0.2,r*0.09);
+    pop();
+  }
+  pop();
+  // 抖落的雪
+  burst=burst.filter(b=>{b.age+=dt;return b.age<0.8;});
+  for(const b of burst){const k=b.age/0.8;
+    noStroke();fill(240,246,252,220*(1-k));
+    circle(x+cos(b.a)*b.sp*b.age*1.6, y+sin(b.a)*b.sp*b.age*1.6+120*b.age*b.age, 5*(1-k)+2);}
+}
+</script>
+</body>
+</html>
