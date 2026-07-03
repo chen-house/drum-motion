@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>鼓棒小人 · 角色设计稿</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#0a1424;height:100%;overflow:hidden}
+  canvas{display:block;margin:0 auto}
+</style>
+</head>
+<body>
+<script>
+// ============ 角色设计稿:三个候选 × 四个姿势 + 底部遮雨构图小样 ============
+const DESIGN_W=720, DESIGN_H=1280;
+let S=1, blinks={};
+function setup(){
+  const s=min(windowWidth/DESIGN_W,windowHeight/DESIGN_H);
+  S=s; createCanvas(DESIGN_W*s,DESIGN_H*s); frameRate(60);
+}
+function windowResized(){const s=min(windowWidth/DESIGN_W,windowHeight/DESIGN_H);S=s;resizeCanvas(DESIGN_W*s,DESIGN_H*s);}
+
+function blinkOf(id,t){
+  if(!blinks[id]) blinks[id]={next:random(1.5,4),b:0};
+  const B=blinks[id];
+  if(t>B.next){B.b=0.12;B.next=t+random(1.8,4.2);}
+  B.b=max(0,B.b-deltaTime/1000);
+  return B.b>0?0.15:1;
+}
+
+function draw(){
+  scale(S);
+  const t=millis()/1000;
+  background(10,20,36);
+  fill(215,228,246); noStroke(); textAlign(CENTER);
+  textSize(26); text('鼓棒小人 · 选一个',360,54);
+  textSize(15); fill(150,168,196);
+  text('A 素棒(极简)      B 围巾棒(暖)      C 抱抱棒(有小手)',360,86);
+
+  const rows=[{id:'A',y:220},{id:'B',y:470},{id:'C',y:720}];
+  const poses=['站','躺看星星','惊抖','依偎睡'];
+  textSize(14);
+  for(let c=0;c<4;c++){ fill(120,140,170); text(poses[c],120+c*165,130); }
+  for(const r of rows){
+    fill(220,205,150); textSize(22); text(r.id,36,r.y-40);
+    for(let c=0;c<4;c++) drawPose(r.id,c,120+c*165,r.y,t);
+    stroke(40,58,86); strokeWeight(1); line(30,r.y+62,690,r.y+62);
+  }
+
+  // ---------- 底部:正确的遮雨构图小样 ----------
+  fill(150,168,196); noStroke(); textSize(15);
+  text('遮雨构图小样(小人躲在镲片底下的三角窝里,雨被盘面挡住)',360,850);
+  drawShelterMock(t);
+}
+
+// ================= 三个候选形象 =================
+function stickBase(bob){  // 鼓棒身体,原点在脚底
+  strokeCap(ROUND);
+  stroke(92,64,36); strokeWeight(19); line(0,0,0,-96);
+  stroke(200,154,100); strokeWeight(14); line(0,0,0,-96);
+  stroke(230,192,134); strokeWeight(4.5); line(-3,-6,-3,-88);
+  noStroke(); fill(208,164,108); ellipse(0,-104,28,24);
+  fill(236,200,144); ellipse(-3,-108,13,9);
+}
+function faceOn(id,t,asleep){
+  const bl=blinkOf(id,t);
+  if(asleep){ stroke(60,44,30); strokeWeight(2.4); noFill();
+    arc(-5.5,-104,7,5,0.15,PI-0.15); arc(5.5,-104,7,5,0.15,PI-0.15);
+  }else{ noStroke(); fill(50,38,26);
+    ellipse(-5.5,-104,4.6,4.6*bl); ellipse(5.5,-104,4.6,4.6*bl); }
+  // 腮红(B、C 用)
+}
+function extraB(){ // 围巾
+  noStroke(); fill(196,88,74);
+  rect(-11,-94,22,9,4);
+  rect(2,-90,8,20,3);
+  fill(228,120,102); rect(-11,-94,22,4,2);
+  // 腮红
+  fill(232,150,120,140); ellipse(-9,-99,6,4); ellipse(9,-99,6,4);
+}
+function extraC(t,hug){ // 小手 + 呆毛
+  stroke(200,154,100); strokeWeight(4.5); strokeCap(ROUND); noFill();
+  const sw=sin(t*2.2)*4;
+  if(hug){ arc(0,-70,34,22,-0.6,PI*0.5); }
+  else{ line(0,-72,-14,-60+sw); line(0,-72,14,-60-sw); }
+  // 呆毛
+  noFill(); stroke(160,120,70); strokeWeight(3);
+  arc(2,-118,14,12,PI,PI+1.6);
+  // 腮红
+  noStroke(); fill(232,150,120,140); ellipse(-9,-99,6,4); ellipse(9,-99,6,4);
+}
+function drawPose(id,c,x,y,t){
+  const bob=sin(t*2+c)*3;
+  push(); translate(x,y+bob*0.5);
+  if(c===0){            // 站
+    stickBase(); if(id==='B')extraB(); if(id==='C')extraC(t,false);
+    faceOn(id+c,t,false);
+  }else if(c===1){      // 躺看星星
+    rotate(radians(80)); stickBase(); if(id==='B')extraB(); if(id==='C')extraC(t,false);
+    faceOn(id+c,t,false);
+  }else if(c===2){      // 惊抖
+    translate(sin(t*28)*2.4,0); rotate(radians(sin(t*28)*3));
+    stickBase(); if(id==='B')extraB(); if(id==='C')extraC(t,false);
+    faceOn(id+c,t,false);
+    // 惊叹号
+    fill(255,220,120); noStroke(); textSize(18); text('!',16,-118);
+  }else{                // 依偎睡(两根)
+    push(); rotate(radians(9)); stickBase(); if(id==='B')extraB(); if(id==='C')extraC(t,true); faceOn(id+c+'l',t,true); pop();
+    push(); translate(21,2); rotate(radians(-11)); stickBase(); if(id==='B')extraB(); if(id==='C')extraC(t,true); faceOn(id+c+'r',t,true); pop();
+    const k=(t%2.4)/2.4;
+    fill(220,232,250,180*(1-k)); textSize(13+8*k); text('z',34+k*20,-120-k*26);
+  }
+  pop();
+}
+
+// ================= 遮雨构图小样 =================
+let mockRain=[];
+function drawShelterMock(t){
+  const ox=360, oy=1050; // 场景中心
+  // 地面
+  noStroke(); fill(14,34,40); rect(60,oy+38,600,80,10);
+  // --- 先画小人(会被镲沿盖住上半) ---
+  push(); translate(ox+62,oy+40);
+  push(); rotate(radians(10)); scale(0.72); stickBase(); faceOn('m1',t,true); pop();
+  push(); translate(16,1); rotate(radians(-12)); scale(0.72); stickBase(); faceOn('m2',t,true); pop();
+  pop();
+  // --- 镲片斜靠,罩住他们 ---
+  push();
+  translate(ox-10,oy-58); rotate(radians(-38+sin(t*1.2)*1.2));
+  const R=150, sq=0.5;
+  noStroke();
+  for(let i=22;i>0;i--){ const k=i/22;
+    fill(lerpColor(color(150,110,52),color(250,224,158),1-k));
+    ellipse(0,0,R*2*k*sq,R*2*k);
+  }
+  noFill(); stroke(255,242,200,28);
+  for(let i=1;i<10;i++){strokeWeight(1.2);ellipse(0,0,R*2*i/10*sq,R*2*i/10);}
+  stroke(100,74,36); strokeWeight(3); ellipse(0,0,R*2*sq,R*2);
+  for(let i=6;i>0;i--){const k=i/6;noStroke();
+    fill(lerpColor(color(208,168,96),color(255,246,205),1-k));
+    ellipse(0,0,42*k*sq,42*k);}
+  pop();
+  // --- 雨:碰到镲面就停(挡雨看得见) ---
+  if(mockRain.length===0) for(let i=0;i<40;i++) mockRain.push({x:random(80,640),y:random(820,1100),sp:random(420,650)});
+  stroke(198,214,236,120); strokeWeight(1.5);
+  for(const d of mockRain){
+    d.y+=d.sp*deltaTime/1000; d.x-=d.sp*0.16*deltaTime/1000;
+    // 镲的遮挡区:斜面下方的三角窝不下雨
+    const inShelter = d.x>ox-40 && d.x<ox+150 && d.y>oy-70;
+    const hitDisc   = d.x>ox-160 && d.x<ox+120 && d.y>oy-130 && d.y<oy-20;
+    if(hitDisc){ // 砸在镲面:小水花
+      noStroke(); fill(235,242,252,190); circle(d.x,d.y-6,3);
+      stroke(198,214,236,120);
+      d.y=random(700,780); d.x=random(80,640); continue;
+    }
+    if(!inShelter) line(d.x,d.y,d.x-6,d.y+16);
+    if(d.y>oy+50){ d.y=random(700,780); d.x=random(80,640); }
+  }
+}
+</script>
+</body>
+</html>

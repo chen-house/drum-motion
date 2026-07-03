@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>荷叶镲 · 荷花池</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#0a1424;height:100%;overflow:hidden}
+  canvas{display:block;margin:0 auto}
+</style>
+</head>
+<body>
+<script>
+// ============ 参数区 ============
+const W=720,H=1280;
+const T_RAIN=2.5;       // 开始下雨
+const T_BEND=3.8;       // 荷叶开始歪身
+const BEND_DUR=1.8;
+const T_SLEEP=10;
+const RAIN_N=110;
+const RIPPLE_COL=[255,230,160];
+const WATER=980;                        // 水面线
+const SNARE={x:290,y:872,rx:130,ry:24,h:96};
+const CYM={baseX:540, idleY:600, R:170, SQ:0.32}; // SQ=荷叶面的透视扁度(恒定,面永远朝天)
+// ================================
+let S=1,t0=0,rain=[],ripples=[],splashes=[],drips=[],pondRings=[];
+let dip=0,dipV=0,bl1=0,bl2=0,nb1=2,nb2=3,lastLeafHit=0;
+
+function setup(){
+  const s=min(windowWidth/W,windowHeight/H);S=s;
+  createCanvas(W*s,H*s);frameRate(60);t0=millis()/1000;
+  for(let i=0;i<RAIN_N;i++)rain.push({x:random(-80,800),y:random(-1300,0),sp:random(560,860),len:random(24,50),w:random()<0.3?2:1,land:random(WATER+15,1200)});
+}
+function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
+function mousePressed(){t0=millis()/1000;ripples=[];splashes=[];drips=[];pondRings=[];}
+function ease(x){x=constrain(x,0,1);return x*x*(3-2*x);}
+function T(){return millis()/1000-t0;}
+
+function draw(){
+  scale(S);
+  const t=T(),dt=min(deltaTime/1000,0.05);
+  const rainAmt=t<T_RAIN?0:ease((t-T_RAIN)/1.6);
+  const bend=ease((t-T_BEND)/BEND_DUR);
+  const bob=sin(t*0.9)*2.5, roll=sin(t*1.05)*2.6;   // 摇篮式:绕底部支点慢慢摇
+
+  // ---- 夜空 ----
+  for(let y=0;y<WATER;y+=6){const k=y/WATER;
+    stroke(lerpColor(color(9,18,38),color(15,36,54),k));strokeWeight(6);line(0,y,W,y);}
+  noStroke();fill(228,238,250,200*(1-rainAmt*0.55));circle(150,140,56);
+  fill(lerpColor(color(9,18,38),color(15,30,50),0.4));circle(166,130,46);
+
+  // ---- 荷花池水面 ----
+  drawPond(t,dt,rainAmt);
+
+  // ---- 军鼓(摇篮:绕底部支点摇) ----
+  const pivY=SNARE.y+SNARE.h+12;
+  push();translate(SNARE.x,pivY+bob);rotate(radians(roll));
+  translate(-SNARE.x,-pivY);
+  drawSnare(t);
+  drawSticks(t,dt);
+  pop();
+
+  // ---- 荷叶镲 ----
+  drawCymbal(t,dt,bend,bob);
+
+  // ---- 雨 ----
+  if(rainAmt>0.01)updateRain(t,dt,rainAmt,bend);
+
+  // ---- 叶面涟漪 ----
+  ripples=ripples.filter(r=>{r.age+=dt;return r.age<1.4;});
+  for(const r of ripples)drawRipple(r,t,bend);
+  // ---- 水花 ----
+  splashes=splashes.filter(s=>{s.age+=dt;s.x+=s.vx*dt;s.y+=s.vy*dt;s.vy+=760*dt;return s.age<s.life;});
+  noStroke();
+  for(const s of splashes){const k=1-s.age/s.life;fill(232,240,252,200*k);circle(s.x,s.y,4*k+1);}
+  // ---- 叶沿滴水 → 落进池里生圈 ----
+  for(const d of drips){const a=t-d.t0;
+    if(a>0){const dy=d.y+a*a*740;
+      if(dy>WATER+30&&!d.done){d.done=true;pondRings.push({x:d.x,y:WATER+34,age:0,big:0.5});}
+      else if(!d.done){noStroke();fill(220,232,248,180*max(0,1-a/0.7));ellipse(d.x,dy,4,7);}}}
+  drips=drips.filter(d=>!d.done&&t-d.t0<0.9);
+}
+
+// ---------------- 荷花池 ----------------
+function drawPond(t,dt,rainAmt){
+  for(let y=WATER;y<H;y+=6){const k=(y-WATER)/(H-WATER);
+    stroke(lerpColor(color(12,40,52),color(6,20,30),k));strokeWeight(6);line(0,y,W,y);}
+  // 月亮倒影(碎摆)
+  stroke(210,226,244,60);
+  for(let i=0;i<7;i++){const yy=WATER+26+i*20;
+    const wob=sin(t*1.6+i*1.3)*10;
+    strokeWeight(3);line(150-24+wob,yy,150+24+wob*0.6,yy);}
+  // 军鼓倒影
+  noStroke();fill(60,40,32,50);
+  ellipse(SNARE.x,WATER+58,SNARE.rx*1.9,40);
+  // 荷叶倒影
+  fill(120,100,50,36);ellipse(CYM.baseX-40,WATER+50,150,26);
+  // 水面波光(常驻横纹漂)
+  stroke(150,190,200,26);strokeWeight(2);
+  for(let i=0;i<9;i++){const yy=WATER+14+i*26;
+    const ph=t*(14+i*3);
+    line((ph%800)-60,yy,(ph%800)+30,yy);}
+  // 雨落水面的圈
+  pondRings=pondRings.filter(r=>{r.age+=dt;return r.age<1.3;});
+  noFill();
+  for(const r of pondRings){const k=r.age/1.3;
+    const rr=(6+70*ease(k))*(r.big||1);
+    stroke(190,220,235,150*(1-k));strokeWeight(1.6);
+    ellipse(r.x,r.y,rr*2,rr*0.5);}
+}
+
+// ---------------- 军鼓 ----------------
+function drawSnare(t){
+  const {x,y,rx,ry,h}=SNARE;
+  noStroke();
+  // 鼓身:上下都按圆柱透视(下沿同样是弧)
+  fill(122,66,44);
+  rect(x-rx,y,rx*2,h);
+  ellipse(x,y+h,rx*2,ry*2);          // 底面弧
+  fill(140,80,54);rect(x-rx,y,rx*2,h*0.45);
+  // 拉杆(跟着弧排布)
+  fill(196,186,170);
+  for(let i=0;i<6;i++){const k=i/5;const lx=x-rx+12+k*(rx*2-24);
+    const dy=sin(k*PI)*0;rect(lx-3,y+10,6,h-16,3);}
+  // 下箍:椭圆环(透视)
+  noFill();stroke(214,206,190);strokeWeight(10);
+  arc(x,y+h,rx*2+6,ry*2+6,0.08,PI-0.08);
+  // 上箍:椭圆环
+  stroke(214,206,190);strokeWeight(10);ellipse(x,y,rx*2+6,ry*2+6);
+  // 鼓面
+  noStroke();fill(236,230,214);ellipse(x,y,rx*2,ry*2);
+  noFill();stroke(180,172,156);strokeWeight(2);ellipse(x,y,rx*1.7,ry*1.7);
+  // 水線(弧形,池水抱住鼓底)
+  noStroke();fill(12,40,52,150);
+  ellipse(x,y+h+4,rx*2+16,ry*2+10);
+}
+
+// ---------------- 鼓棒小人(瘦回棒,怜人) ----------------
+function drawSticks(t,dt){
+  if(t>nb1){bl1=0.12;nb1=t+random(1.8,4);}if(t>nb2){bl2=0.12;nb2=t+random(1.8,4);}
+  bl1=max(0,bl1-dt);bl2=max(0,bl2-dt);
+  const asleep=t>T_SLEEP;
+  const startle=(t>T_RAIN+0.5&&t<T_BEND+0.6)?sin(t*26)*2*(1-ease((t-T_RAIN-0.5)/3)):0;
+  const hug=ease((t-(T_RAIN+0.9))/0.9);
+  const br=asleep?sin(t*1.3)*2:sin(t*2.0)*1.3;
+  const y0=SNARE.y-10;
+  // 头相对而卧(怜人=面对面依偎)
+  push();translate(SNARE.x-64+hug*18+startle,y0+br*0.5);rotate(radians(4));
+  stickCute(t,bl1,asleep,1);pop();
+  push();translate(SNARE.x+64-hug*18-startle,y0+br*0.6+1);rotate(radians(-4));
+  stickCute(t,bl2,asleep,-1);pop();
+  if(asleep){const k=(t%2.4)/2.4;noStroke();fill(220,232,250,170*(1-k));
+    textSize(13+8*k);text('z',SNARE.x+8+k*18,y0-40-k*26);}
+}
+function stickCute(t,blink,asleep,side){
+  // side=1 头朝右(向中间), side=-1 头朝左
+  const L=96;
+  // 身体:细长小棒,略收锥
+  noStroke();fill(150,108,74);
+  beginShape();
+  vertex(-L*0.5*side,-6);vertex(L*0.38*side,-4.6);vertex(L*0.38*side,4.6);vertex(-L*0.5*side,6);
+  endShape(CLOSE);
+  fill(216,172,126);
+  beginShape();
+  vertex(-L*0.5*side,-4.4);vertex(L*0.38*side,-3.4);vertex(L*0.38*side,3.4);vertex(-L*0.5*side,4.4);
+  endShape(CLOSE);
+  fill(240,206,160);rect(min(-L*0.42*side,L*0.3*side),-2.6,abs(L*0.72),2,2);
+  // 头:圆珠(橡子头)
+  fill(218,174,128);ellipse(L*0.46*side,-1,22,20);
+  fill(242,208,162);ellipse(L*0.43*side,-5,10,7);
+  // 脸(大眼+高光,怜)
+  const ex=L*0.46*side,ey=-1;
+  if(asleep){stroke(96,66,44);strokeWeight(2.2);noFill();
+    arc(ex-4.5,ey,6,4.5,0.15,PI-0.15);arc(ex+4.5,ey,6,4.5,0.15,PI-0.15);
+  }else{const b=blink>0?0.12:1;noStroke();
+    fill(60,42,30);ellipse(ex-4.5,ey,5.4,5.4*b);ellipse(ex+4.5,ey,5.4,5.4*b);
+    if(b>0.5){fill(255,255,255,230);circle(ex-3.4,ey-1.4,1.8);circle(ex+5.6,ey-1.4,1.8);}}
+  noStroke();fill(236,150,118,120);ellipse(ex-9,ey+4,5.5,3.5);ellipse(ex+9,ey+4,5.5,3.5);
+}
+
+// ---------------- 荷叶镲(面永远朝天) ----------------
+function cymPose(bend,t,bob){
+  const sway=sin(t*1.1)*2 + dip*0.1;
+  const cx=lerp(CYM.baseX, SNARE.x+46, bend);
+  const cy=lerp(CYM.idleY, SNARE.y-140, bend)+bob*bend*0.4;
+  const rot=lerp(0,-13,bend)+sway;          // 平日端平,遮雨时歪身13°
+  return {cx,cy,rot};
+}
+function drawCymbal(t,dt,bend,bob){
+  dipV+=(-dip*130-dipV*7)*dt;dip+=dipV*dt;
+  const p=cymPose(bend,t,bob);
+  // 茎:从水里长出来,弯腰
+  const bx=CYM.baseX+10,by=WATER+16;
+  noFill();stroke(52,64,54);strokeWeight(9);
+  bezier(bx,by,bx,lerp(800,900,bend),lerp(bx,p.cx,0.5),lerp(820,p.cy+90,0.7),p.cx,p.cy+6);
+  stroke(80,94,80);strokeWeight(4);
+  bezier(bx,by,bx,lerp(800,900,bend),lerp(bx,p.cx,0.5),lerp(820,p.cy+90,0.7),p.cx,p.cy+6);
+  // 茎入水的圈
+  noFill();stroke(150,190,200,50);strokeWeight(2);
+  ellipse(bx,by+4,44+sin(t*2)*5,10);
+  // 叶(镲面,恒平摊)
+  push();translate(p.cx,p.cy+dip*0.1);rotate(radians(p.rot));
+  const R=CYM.R,SQ=CYM.SQ;
+  noStroke();
+  for(let i=24;i>0;i--){const k=i/24;
+    fill(lerpColor(color(150,110,52),color(250,224,158),1-k));
+    ellipse(0,0,R*2*k,R*2*k*SQ);}
+  noFill();stroke(255,242,200,30);
+  for(let i=1;i<11;i++){strokeWeight(1.2);ellipse(0,0,R*2*i/11,R*2*i/11*SQ);}
+  stroke(100,74,36);strokeWeight(3);ellipse(0,0,R*2,R*2*SQ);
+  stroke(255,250,215,70+45*sin(t*1.2));strokeWeight(4);
+  arc(0,0,R*1.55,R*1.55*SQ,-2.6+0.2*sin(t*0.7),-1.4+0.2*sin(t*0.7));
+  for(let i=6;i>0;i--){const k=i/6;noStroke();
+    fill(lerpColor(color(208,168,96),color(255,246,205),1-k));
+    ellipse(0,0,44*k,44*k*SQ);}
+  pop();
+}
+function cymPoint(u,v,bend,t,bob){
+  const p=cymPose(bend,t,bob),R=CYM.R,r=radians(p.rot);
+  const lx=u*R,ly=v*R*CYM.SQ;
+  return {x:p.cx+lx*cos(r)-ly*sin(r),y:p.cy+lx*sin(r)+ly*cos(r)};
+}
+function drawRipple(r,t,bend){
+  const p=cymPose(bend,t,0),R=CYM.R,k=r.age/1.4;
+  const rr=0.07+0.68*(1-exp(-2.6*r.age));
+  push();translate(p.cx,p.cy);rotate(radians(p.rot));
+  noFill();
+  stroke(RIPPLE_COL[0],RIPPLE_COL[1],RIPPLE_COL[2],200*exp(-2.6*r.age));
+  strokeWeight(3.2-2*k);
+  ellipse(r.u*R,r.v*R*CYM.SQ,rr*2*R,rr*2*R*CYM.SQ);
+  pop();
+}
+
+// ---------------- 雨 ----------------
+function updateRain(t,dt,amt,bend){
+  const n=floor(rain.length*amt);
+  const p=cymPose(bend,t,0);
+  for(let i=0;i<n;i++){
+    const d=rain[i];
+    d.y+=d.sp*dt;d.x-=d.sp*0.16*dt;
+    if(bend>0.9){
+      const r=radians(p.rot);
+      const dx=d.x-p.cx,dy=d.y-p.cy;
+      const u=(dx*cos(r)+dy*sin(r))/CYM.R;
+      const v=(-dx*sin(r)+dy*cos(r))/(CYM.R*CYM.SQ);
+      if(u*u+v*v<1&&dy<0.3*CYM.R){
+        if(t-lastLeafHit>0.32&&ripples.length<5){lastLeafHit=t;
+          ripples.push({u:u*0.8,v:v*0.8,age:0});dipV+=42;
+          if(random()<0.5){const e=cymPoint(0.95,0.2,bend,t,0);drips.push({x:e.x,y:e.y,t0:t+random(0.1,0.3),done:false});}}
+        const q=cymPoint(u*0.8,v*0.8,bend,t,0);
+        for(let k2=0;k2<2;k2++)splashes.push({x:q.x,y:q.y,vx:random(-60,60),vy:random(-130,-50),age:0,life:random(0.26,0.4)});
+        d.y=random(-300,-30);d.x=random(-80,800);continue;
+      }
+      const shelter=d.x>SNARE.x-CYM.R*0.95&&d.x<SNARE.x+CYM.R*0.95&&d.y>p.cy;
+      if(shelter){d.y=random(-300,-30);d.x=random(-80,800);continue;}
+    }
+    stroke(198,214,236,115);strokeWeight(d.w);
+    line(d.x,d.y,d.x-d.len*0.16,d.y+d.len);
+    if(d.y>d.land){
+      pondRings.push({x:d.x,y:d.land,age:0,big:map(d.land,WATER,1200,0.5,1.1)});
+      d.y=random(-300,-30);d.x=random(-80,800);
+    }
+  }
+}
+</script>
+</body>
+</html>
