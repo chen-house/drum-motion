@@ -187,7 +187,11 @@ function drawBass(t,dt,pulse){
   const y=GROUND-BR+6;
   const kick=onBeat(t,0);
   const sq=1+0.06*kick+0.02*pulse;
-  push();translate(x,y);scale(sq,1/sq);
+  // 跳舞:左右摇摆+随拍撼动
+  const j=jamBeat(t);
+  let dRot=0,dx=0;
+  if(j){dRot=radians(10*sin(PI*j.bt));dx=14*sin(PI*j.bt*0.5);}
+  push();translate(x+dx,y);rotate(dRot);scale(sq,1/sq);
   push();rotate(bassTheta);
   noStroke();
   fill(216,226,240);circle(0,0,BR*2.06);
@@ -213,7 +217,9 @@ function snarePos(t){
   if(t<T_JAM){const k=seg(t,T_SNARE,T_SNARE+1.8);
     return {x:lerp(W+90,470,k),y:GROUND-32+hop((k*5)%1,46)};}
   if(t<T_BUILD+1.2){const snr=onBeat(t,1);
-    return {x:470,y:GROUND-32-26*snr};}
+    const j=jamBeat(t);
+    const bounce=j?12*abs(sin(PI*j.bt)):0;   // 连续弹跳
+    return {x:470+(j?10*sin(PI*j.bt*0.5):0),y:GROUND-32-26*snr-bounce};}
   const k=seg(t,T_BUILD+1.2,T_BUILD+2.4);
   return {x:lerp(470,CX,k),y:lerp(GROUND-32,HEADY,k)+hop(k,96)};
 }
@@ -225,6 +231,8 @@ function drawSnare(t,dt,pulse){
   let blink=1;
   if(alive){const c=(t*0.43)%1;blink=c>0.94?0.12:1;}
   push();translate(p.x,p.y);
+  const jj=jamBeat(t);
+  if(jj)rotate(radians(8*sin(PI*jj.bt+1.57)));   // 跳舞:侧倾扭动
   const sq=1+0.12*snr;scale(sq,1/sq);
   noStroke();
   fill(122,66,44);rect(-w/2,-h/2,w,h,6);
@@ -252,6 +260,8 @@ function drawSnare(t,dt,pulse){
 function cymPos(t){
   if(t<T_JAM){const k=seg(t,T_CYM,T_CYM+1.6);
     return {x:lerp(W+120,560,k),y:GROUND-26-90*sin(k*PI)*(1-k*0.5),rot:-8,spinv:(1-k)*10};}
+  if(t<T_BUILD){const j=jamBeat(t);const b=j?j.bt:0;   // 跳舞:八分音抖肩
+    return {x:560+8*sin(PI*b),y:GROUND-26-9*abs(sin(PI*b)),rot:-8+12*sin(TWO_PI*b),spinv:0};}
   if(t<T_BUILD+2.4)return {x:560,y:GROUND-26,rot:-8,spinv:0};
   if(t<T_FIX+0.9){
     const k=seg(t,T_BUILD+2.4,T_BUILD+3.3);
@@ -295,8 +305,9 @@ function drawStickA(t,dt){
   let x,y,rot=0;
   if(t<T_JAM){const k=seg(t,T_STICKS,T_STICKS+1.6);
     x=lerp(-60,250,k);y=GROUND+8+hop((k*6)%1,26);}
-  else if(t<T_BUILD){const j=jamBeat(t);
-    x=250+16*sin(t*2.6);y=GROUND+8+(j?hop(j.ph,20):0);}
+  else if(t<T_BUILD){const j=jamBeat(t);   // 跳舞:扭+跳
+    if(j){x=250+18*sin(PI*j.bt);y=GROUND+8+hop(j.ph,24);rot=16*sin(PI*j.bt);}
+    else{x=250;y=GROUND+8;}}
   else if(t<T_BUILD+3.0){const k=seg(t,T_BUILD+2.2,T_BUILD+3.0);
     x=lerp(250,CX-120,k);y=GROUND+8+hop((k*3)%1,30);}
   else{
@@ -312,8 +323,9 @@ function drawStickB(t,dt){
   let x,y,rot=0,tilt=0;
   if(t<T_JAM){const k=seg(t,T_STICKS+0.25,T_STICKS+1.85);
     x=lerp(-90,205,k);y=GROUND+8+hop((k*6)%1,26);}
-  else if(t<T_BUILD){const j=jamBeat(t);
-    x=205-14*sin(t*2.6);y=GROUND+8+(j?hop((j.ph+0.5)%1,20):0);}
+  else if(t<T_BUILD){const j=jamBeat(t);   // 跳舞:镜像扭跳(错半拍)
+    if(j){x=205-18*sin(PI*j.bt);y=GROUND+8+hop((j.ph+0.5)%1,24);rot=-16*sin(PI*j.bt);}
+    else{x=205;y=GROUND+8;}}
   else if(t<T_LOOK){x=205;y=GROUND+8;tilt=6*sin(t*1.4);}
   else if(t<T_FIX){
     const k=seg(t,T_LOOK,T_LOOK+0.8);
