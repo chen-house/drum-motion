@@ -57,6 +57,17 @@ function ez(x){x=constrain(x,0,1);return x*x*(3-2*x);}
 function seg(t,a,b){return ez((t-a)/(b-a));}
 function T(){return millis()/1000-t0;}
 function hop(u,h){return -4*h*u*(1-u);}   // 抛物线跳(u:0..1)
+// ---- 不倒翁摇摆(活过来后,整个雪人绕底部支点左右摆) ----
+const ROCK_AMP=4.5, ROCK_W=1.6, PIVY=GROUND+8;
+function rock(t){
+  if(t<T_ALIVE)return 0;
+  const k=ez((t-T_ALIVE)/1.5);
+  return radians(ROCK_AMP*k)*sin((t-T_ALIVE)*ROCK_W);
+}
+function rockXY(x,y,a){
+  const dx=x-CX,dy=y-PIVY;
+  return {x:CX+dx*cos(a)-dy*sin(a), y:PIVY+dx*sin(a)+dy*cos(a)};
+}
 
 // ================== 主循环 ==================
 function draw(){
@@ -189,9 +200,11 @@ function drawBass(t,dt,pulse){
   const sq=1+0.06*kick+0.02*pulse;
   // 跳舞:左右摇摆+随拍撼动
   const j=jamBeat(t);
-  let dRot=0,dx=0;
+  let dRot=0,dx=0,dy2=0;
   if(j){dRot=radians(10*sin(PI*j.bt));dx=14*sin(PI*j.bt*0.5);}
-  push();translate(x+dx,y);rotate(dRot);scale(sq,1/sq);
+  const ra=rock(t);               // 不倒翁
+  if(ra){const q=rockXY(x,y,ra);dx+=q.x-x;dy2=q.y-y;dRot+=ra;}
+  push();translate(x+dx,y+dy2);rotate(dRot);scale(sq,1/sq);
   push();rotate(bassTheta);
   noStroke();
   fill(216,226,240);circle(0,0,BR*2.06);
@@ -230,7 +243,10 @@ function drawSnare(t,dt,pulse){
   const alive=t>T_ALIVE;
   let blink=1;
   if(alive){const c=(t*0.43)%1;blink=c>0.94?0.12:1;}
+  const ra=rock(t);               // 不倒翁
+  if(ra){const q=rockXY(p.x,p.y,ra);p.x=q.x;p.y=q.y;}
   push();translate(p.x,p.y);
+  if(ra)rotate(ra);
   const jj=jamBeat(t);
   if(jj)rotate(radians(8*sin(PI*jj.bt+1.57)));   // 跳舞:侧倾扭动
   const sq=1+0.12*snr;scale(sq,1/sq);
@@ -268,7 +284,10 @@ function cymPos(t){
     return {x:lerp(560,CX+16,k),y:lerp(GROUND-26,HATY,k)-70*sin(k*PI),
             rot:lerp(-8,-38,k),spinv:(1-k)*8};}
   const k=seg(t,T_FIX+0.9,T_FIX+1.7);
-  return {x:CX+16-8*k,y:HATY,rot:lerp(-38,-12,k)+(k>=1?2*sin(t*1.1):0),spinv:0};
+  let hx=CX+16-8*k,hy=HATY,hr=lerp(-38,-12,k)+(k>=1?2*sin(t*1.1):0);
+  const ra=rock(t);               // 不倒翁
+  if(ra){const q=rockXY(hx,hy,ra);hx=q.x;hy=q.y;hr+=degrees(ra);}
+  return {x:hx,y:hy,rot:hr,spinv:0};
 }
 function drawCymbal(t,dt,pulse){
   if(t<T_CYM)return;
@@ -314,6 +333,8 @@ function drawStickA(t,dt){
     const k=seg(t,T_BUILD+3.0,T_BUILD+3.6);
     x=lerp(CX-120,CX-88,k);y=lerp(GROUND+8,GROUND-BR-30,k)+hop(k,50);rot=lerp(0,55,k);}
   const wig=(t>T_BUILD+3.6&&t<T_ALIVE)?3*sin(t*7):0;
+  const ra=rock(t);               // 不倒翁
+  if(ra){const q=rockXY(x,y,ra);x=q.x;y=q.y;rot+=degrees(ra);}
   push();translate(x,y);rotate(radians(rot+wig));
   drawStickBody(0);pop();
 }
@@ -347,6 +368,8 @@ function drawStickB(t,dt){
   else{
     const k=seg(t,T_CLIMB+1.5,T_CLIMB+2.1);
     x=lerp(178,CX+88,k);y=lerp(GROUND+8,GROUND-BR-30,k)+hop(k,64);rot=lerp(0,-55,k);}
+  const ra=rock(t);               // 不倒翁
+  if(ra){const q=rockXY(x,y,ra);x=q.x;y=q.y;rot+=degrees(ra);}
   push();translate(x,y);rotate(radians(rot+tilt));
   drawStickBody(0);pop();
 }
