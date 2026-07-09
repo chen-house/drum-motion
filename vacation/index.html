@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>雪人的假期</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<style>
+  html,body{margin:0;padding:0;background:#bfe6f2;height:100%;overflow:hidden}
+  canvas{display:block;margin:0 auto}
+</style>
+</head>
+<body>
+<script>
+// ================= 参数区 =================
+const W=720,H=1280;
+const T_STEAL=4.5;    // 捣蛋鬼A 偷遮阳伞
+const T_DROP1=5.7;    // 伞太大罩下来(小钟)
+const T_TRY2=7.4;     // 再试
+const T_DROP2=8.6;    // 又掉
+const T_TAKE=9.8;     // 雪人拿回伞插回去
+const T_STOMP=11.0;   // 认了,蹦回去
+const SNOW=150;       // 雪地线(地平)
+const CX=330;         // 雪人中心x
+const BR=96;          // 底鼓(身子)半径
+const HR=62;          // 军鼓(头)半宽
+// 竖直堆叠:身子在下,头在上
+let GROUND, BODYY, HEADY, HATY, PIVY;
+// ==========================================
+let S=1,t0=0,snow=[],drips=[],flakes=[],sparkle=[];
+
+function setup(){
+  const s=min(windowWidth/W,windowHeight/H);S=s;
+  createCanvas(W*s,H*s);frameRate(60);
+  GROUND=1010; BODYY=GROUND-BR; HEADY=BODYY-BR-34; HATY=HEADY-52; PIVY=GROUND+30;
+  reset();
+}
+function reset(){
+  t0=millis()/1000;drips=[];flakes=[];
+  randomSeed(9);
+  snow=[];for(let i=0;i<80;i++)snow.push({x:random(W),y:random(SNOW,H),r:random(2,5),ph:random(TWO_PI)});
+  sparkle=[];for(let i=0;i<60;i++)sparkle.push({x:random(W),y:random(SNOW+40,H),ph:random(TWO_PI)});
+}
+function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
+function mousePressed(){reset();}
+function ez(x){x=constrain(x,0,1);return x*x*(3-2*x);}
+function seg(t,a,b){return ez((t-a)/(b-a));}
+function T(){return millis()/1000-t0;}
+function hop(u,h){return -4*h*u*(1-u);}
+function rock(t){return radians(3.4)*sin(t*1.05);}   // 不倒翁慢摆
+function rk(x,y,a){const dx=x-CX,dy=y-PIVY;return {x:CX+dx*cos(a)-dy*sin(a),y:PIVY+dx*sin(a)+dy*cos(a)};}
+
+// ================== 主循环 ==================
+function draw(){
+  scale(S);
+  const t=T(),dt=min(deltaTime/1000,0.05);
+  drawSky(t);
+  drawSnowGround(t);
+  drawChair(t);
+  drawSnowman(t,dt);
+  drawStickA(t,dt);
+  drawStickB(t,dt);
+  updateFlakes(t,dt);
+}
+
+// ---------------- 天空 + 大太阳 ----------------
+function drawSky(t){
+  for(let y=0;y<SNOW+40;y+=6){const k=y/(SNOW+40);
+    stroke(lerpColor(color(120,196,232),color(200,232,244),k));strokeWeight(6);line(0,y,W,y);}
+  const sx=568,sy=138;
+  noStroke();
+  for(let r=190;r>0;r-=12){fill(255,240,150,7);circle(sx,sy,r*2);}
+  push();translate(sx,sy);
+  stroke(255,232,120,170);strokeWeight(5);
+  for(let k=0;k<14;k++){const a=t*0.3+k*TWO_PI/14,L=78+8*sin(t*3+k);
+    line(cos(a)*L,sin(a)*L,cos(a)*(L+26),sin(a)*(L+26));}
+  pop();
+  noStroke();fill(255,244,150);circle(sx,sy,116);
+  fill(255,250,205);circle(sx-8,sy-8,86);
+  // 太阳的笑脸(戴墨镜,和雪人呼应)
+  fill(40,40,50);ellipse(sx-24,sy-4,30,26);ellipse(sx+24,sy-4,30,26);
+  stroke(40,40,50);strokeWeight(5);line(-9+sx,sy-6,9+sx,sy-6);
+  noStroke();fill(230,120,120);noFill();stroke(210,150,60);strokeWeight(4);
+  arc(sx,sy+24,40,26,0.2,PI-0.2);
+  // 淡云
+  noStroke();fill(255,255,255,150);
+  ellipse(150,90,120,36);ellipse(120,80,70,28);ellipse(190,84,80,30);
+}
+
+// ---------------- 雪地 ----------------
+function drawSnowGround(t){
+  noStroke();
+  fill(238,245,252);rect(0,SNOW,W,H-SNOW);
+  // 雪丘
+  fill(228,238,250);ellipse(120,SNOW+40,460,120);ellipse(600,SNOW+30,520,120);
+  fill(248,251,255);ellipse(360,SNOW+90,900,180);
+  // 淡蓝背光
+  fill(196,214,236,140);ellipse(520,SNOW+70,300,50);ellipse(90,SNOW+50,220,40);
+  // 雪粒 + 阳光下的闪
+  randomSeed(3);
+  for(let i=0;i<300;i++){const gx=random(W),gy=random(SNOW+10,H);
+    fill(random()<0.5?200:255,random()<0.5?214:255,random()<0.5?236:255,80);rect(gx,gy,2.2,2.2);}
+  randomSeed(millis());
+  for(const s of sparkle){const a=abs(sin(t*2+s.ph));
+    if(a<0.6)continue;fill(255,255,255,200*(a-0.6)/0.4);
+    push();translate(s.x,s.y);stroke(255,255,255,180*(a-0.6)/0.4);strokeWeight(1.2);
+    line(-3,0,3,0);line(0,-3,0,3);pop();}
+  // 慢慢飘落、正在地面小落的雪
+  noStroke();
+  for(const f of snow){f.y+=(10+f.r*4)*deltaTime/1000;
+    const x=f.x+sin(t*0.6+f.ph)*14;
+    fill(255,255,255,180);circle(x,f.y,f.r*1.6);
+    if(f.y>H+6){f.y=SNOW-6;f.x=random(W);}}
+}
+
+// ---------------- 沙滩椅(雪地里!笑点) ----------------
+function drawChair(t){
+  push();translate(CX,GROUND+8);
+  // 椅影
+  noStroke();fill(150,170,200,90);ellipse(20,44,360,34);
+  // 后腿/前腿
+  stroke(70,90,120);strokeWeight(9);strokeCap(ROUND);
+  line(150,40,90,-140);       // 靠背斜杆
+  line(-150,40,-150,-10);
+  // 座面(红白条纹布)——斜躺:后高前低
+  noStroke();
+  const x0=-160,y0=-10,x1=96,y1=-150;   // 座+靠背连成斜面
+  for(let i=0;i<9;i++){const a=i/9,b=(i+1)/9;
+    fill(i%2? [235,240,246]:[220,80,72]);
+    quad(lerp(x0,x1,a),lerp(y0,y1,a)+6, lerp(x0,x1,b),lerp(y0,y1,b)+6,
+         lerp(x0,x1,b),lerp(y0,y1,b)-18, lerp(x0,x1,a),lerp(y0,y1,a)-18);}
+  // 前扶手横杆
+  stroke(70,90,120);strokeWeight(8);line(-160,-10,-120,-40);
+  pop();
+  // 冷饮(插小伞的椰子)在雪人右手边
+  push();translate(CX+150,GROUND-70);
+  noStroke();fill(120,86,60);ellipse(0,0,44,52);
+  fill(150,110,78);ellipse(0,-4,36,34);
+  // 吸管
+  stroke(240,120,120);strokeWeight(5);line(6,-8,20,-46);
+  // 小纸伞
+  push();translate(24,-52);rotate(0.3);
+  fill(240,120,120);arc(0,0,44,44,PI,TWO_PI);
+  stroke(150,110,70);strokeWeight(2);line(0,0,0,16);
+  fill(255,240,120);triangle(-22,0,-14,0,-18,-6);pop();
+  pop();
+}
+
+// ---------------- 雪人(经典竖叠剪影) ----------------
+function drawSnowman(t,dt){
+  const ra=rock(t);
+  // 融化:偶尔滴水
+  if(random()<0.02)drips.push({x:CX+random(-BR*0.7,BR*0.7),y:BODYY+BR*0.7,age:0});
+  // 身子(底鼓)
+  {const p=rk(CX,BODYY,ra);push();translate(p.x,p.y);rotate(ra);
+   // 白边(从雪里跳出来)
+   noStroke();fill(150,180,214);circle(0,0,BR*2.16);
+   fill(126,74,50);circle(0,0,BR*2.0);           // 木箍
+   fill(250,252,255);circle(0,0,BR*1.74);        // 白鼓皮身子
+   fill(196,206,222,120);ellipse(BR*0.4,BR*0.4,BR*1.1,BR*1.0); // 背光
+   fill(196,206,222);for(let k=0;k<8;k++){const a=k*TWO_PI/8+0.4;circle(cos(a)*BR*0.9,sin(a)*BR*0.9,8);}
+   fill(60,62,72);circle(0,BR*0.2,9);circle(0,BR*0.5,8);   // 煤扣子
+   // 防晒霜两道
+   fill(255,255,255,220);ellipse(-24,-4,24,9);ellipse(18,12,28,10);
+   pop();}
+  // 头(军鼓)+ 墨镜
+  {const p=rk(CX,HEADY,ra);push();translate(p.x,p.y);rotate(ra);
+   const w=HR*2,h=64;
+   noStroke();
+   fill(150,180,214);rect(-w/2-4,-h/2-4,w+8,h+8,9);   // 白边
+   fill(122,66,44);rect(-w/2,-h/2,w,h,7);
+   fill(140,80,54);rect(-w/2,-h/2,w,h*0.4,7);
+   fill(214,206,190);rect(-w/2-3,-h/2-5,w+6,10,4);rect(-w/2-3,h/2-5,w+6,10,4);
+   fill(248,250,255);ellipse(0,-h/2,w,18);            // 白鼓面(脸)
+   // 墨镜
+   fill(34,36,44);ellipse(-24,-2,34,30);ellipse(24,-2,34,30);
+   stroke(34,36,44);strokeWeight(5);line(-8,-4,8,-4);line(-41,-6,-54,-10);line(41,-6,54,-10);
+   noStroke();fill(150,190,225,150);ellipse(-30,-8,10,7);ellipse(18,-8,10,7);
+   noFill();stroke(150,120,90);strokeWeight(3);arc(0,20,28,16,0.2,PI-0.2);  // 微笑
+   pop();}
+  // 遮阳伞(镲片)——被偷时不画
+  const stolen=(t>T_STEAL+0.2 && t<T_TAKE);
+  if(!stolen){const p=rk(CX,HATY,ra);
+    push();translate(p.x,p.y);rotate(ra);drawParasol();pop();}
+  // 滴水
+  drips=drips.filter(d=>{d.age+=dt;return d.age<1.1;});
+  noStroke();
+  for(const d of drips){fill(150,205,235,220*(1-d.age/1.1));
+    ellipse(d.x,d.y+d.age*d.age*420,4,7);}
+  // 脚下融出的小水洼
+  noStroke();fill(150,205,235,120);ellipse(CX,GROUND+16,BR*1.6+10*sin(t),18);
+  fill(180,220,242,150);ellipse(CX-10,GROUND+14,BR*0.9,10);
+}
+function drawParasol(){
+  // 斜插的遮阳伞:镲片当伞面
+  push();rotate(radians(-16));
+  noStroke();
+  fill(150,180,214);ellipse(0,0,150,44);        // 边
+  fill(210,120,110);ellipse(0,0,140,40);         // 红伞面
+  fill(238,150,140);ellipse(0,-4,92,24);
+  fill(255,210,200);ellipse(0,-7,32,12);
+  // 伞骨
+  stroke(150,80,72);strokeWeight(2);
+  for(let k=-2;k<=2;k++)line(0,0,k*30,10);
+  // 伞杆(插进身子)
+  stroke(120,90,66);strokeWeight(5);line(6,4,20,54);
+  pop();
+}
+
+// ---------------- 捣蛋鬼A:偷伞→小钟 ----------------
+function stickBody(){
+  const L=88;
+  noStroke();fill(140,100,68);
+  beginShape();vertex(-7,0);vertex(-5,-L);vertex(5,-L);vertex(7,0);endShape(CLOSE);
+  fill(210,166,120);beginShape();vertex(-5.4,0);vertex(-3.8,-L);vertex(3.8,-L);vertex(5.4,0);endShape(CLOSE);
+  fill(214,170,124);ellipse(0,-L-9,22,20);fill(240,206,160);ellipse(-3,-L-13,10,7);
+  fill(60,42,30);ellipse(-4,-L-9,5,5);ellipse(4,-L-9,5,5);
+  fill(255,255,255,225);circle(-3,-L-10.3,1.6);circle(5,-L-10.3,1.6);
+  fill(238,146,116,140);ellipse(-8,-L-5,5.5,3.5);ellipse(8,-L-5,5.5,3.5);
+}
+function bellDome(x,footY,wob){
+  push();translate(x,footY);
+  stroke(150,108,74);strokeWeight(7);strokeCap(ROUND);
+  line(-7,0,-13+wob,24);line(7,0,13-wob,24);pop();        // 两条腿扑腾
+  push();translate(x,footY-52);scale(1.55,1.55);drawParasolFlat();pop(); // 伞整个罩下来
+}
+function drawParasolFlat(){
+  noStroke();fill(210,120,110);ellipse(0,0,140,46);
+  fill(238,150,140);ellipse(0,-5,92,26);fill(255,210,200);ellipse(0,-9,32,12);
+}
+function drawStickA(t,dt){
+  const homeX=CX+160, homeY=GROUND+2;
+  if(t<T_STEAL){push();translate(homeX,homeY);rotate(radians(6*sin(t*1.6)));stickBody();pop();}
+  else if(t<T_DROP1){const k=seg(t,T_STEAL,T_DROP1);
+    const x=lerp(homeX,CX,k),y=lerp(homeY,HATY+30,k)+hop(k,86);
+    push();translate(x,y);rotate(radians(18*sin(k*PI)));stickBody();
+    if(k>0.55){push();translate(0,-92);scale(1.3,1.3);drawParasolFlat();pop();}pop();}
+  else if(t<T_TRY2)bellDome(CX,GROUND+2,sin(t*10)*2);
+  else if(t<T_DROP2){const k=seg(t,T_TRY2,T_DROP2);const lift=hop(k,36);
+    push();translate(CX,GROUND+2+lift);stickBody();
+    push();translate(0,-92-(1-k)*3);scale(1.55,1.55);rotate(radians(5*sin(t*4)));drawParasolFlat();pop();pop();}
+  else if(t<T_TAKE)bellDome(CX,GROUND+2,sin(t*10)*2);
+  else if(t<T_STOMP){push();translate(CX,GROUND+2);rotate(radians(2*sin(t*3)));stickBody();
+    fill(90,70,50);textSize(20);text('?',10,-104);pop();}
+  else{const k=seg(t,T_STOMP,T_STOMP+1.4);
+    const x=lerp(CX,homeX,k),y=homeY+(k<1?abs(sin(t*12))*6*(1-k):0);
+    push();translate(x,y);rotate(radians(6*sin(t*1.6)));stickBody();pop();}
+}
+
+// ---------------- 捣蛋鬼B:雪地里蹦跶捣乱 ----------------
+function drawStickB(t,dt){
+  const homeX=CX-170;
+  let x=homeX+30*sin(t*0.8),y=GROUND+2,poke=0;
+  const phase=(t%5.0);
+  if(phase>3.0&&phase<4.2){const k=(phase-3.0)/1.2;
+    x=lerp(homeX,CX-60,ez(min(k*2,1)))-(k>0.5?lerp(0,50,(k-0.5)*2):0);
+    y=GROUND+2+hop(k,20);poke=sin(k*PI)*18;}
+  push();translate(x,y);rotate(radians(-8*sin(t*1.7)+poke*0.3));stickBody();
+  if(poke>2){noFill();stroke(210,166,120);strokeWeight(5);strokeCap(ROUND);arc(6,-66,28,18,-0.6,0.8);}
+  pop();
+  if(phase>3.6&&phase<4.0){fill(230,80,80);textSize(20);text('!',CX+44,HEADY-32);}
+}
+
+// ---------------- 雪花(迷你小鼓):逆行去晒太阳 ----------------
+function updateFlakes(t,dt){
+  if(random()<0.02)flakes.push({rebel:random()<0.3,x:random(120,620),y:SNOW-20,
+    sp:random(26,52),sw:random(12,26),ph:random(TWO_PI),rot:random(TWO_PI),fx:null,rest:false,age:0});
+  flakes=flakes.filter(f=>{
+    f.age+=dt;f.rot+=dt*1.1;
+    if(f.rebel){
+      // 逆行:先往上飘一段追太阳,再落到雪地上摊开晒
+      if(!f.rest){f.y-=f.sp*dt*0.4;f.fx=(f.fx??f.x)+((520-(f.fx??f.x))*dt*0.4);
+        if(f.age>2.6){f.rest=true;f.landY=GROUND-6;}
+        drawMiniDrum(f.fx,f.y,f.rot,true,false);}
+      else{drawMiniDrum(f.fx,GROUND-6,0,true,true);   // 摊在雪地晒
+        return f.age<9;}
+      return true;
+    }else{
+      f.y+=f.sp*dt;const x=f.x+sin(t*0.7+f.ph)*f.sw;
+      drawMiniDrum(x,f.y,f.rot,false,false);
+      return f.y<H+20;
+    }
+  });
+}
+function drawMiniDrum(x,y,rot,rebel,resting){
+  push();translate(x,y);rotate(resting?0:rot);
+  const r=rebel?13:9;
+  noStroke();
+  fill(150,100,68,rebel?255:210);ellipse(0,r*0.4,r*2,r*0.9);      // 侧壁
+  fill(rebel?255:238,rebel?250:246,rebel?255:255);ellipse(0,0,r*2,r*1.5); // 鼓面
+  stroke(180,150,110,200);strokeWeight(1.3);noFill();ellipse(0,0,r*1.35,r*1.0);
+  if(rebel&&resting){ // 摊开晒:小墨镜 + 冒热气
+    noStroke();fill(40,40,50);ellipse(-5,-1,7,6);ellipse(5,-1,7,6);
+    fill(255,240,190,120);ellipse(0,-r-6,5,9);ellipse(6,-r-9,4,7);}
+  else if(rebel){noStroke();fill(255,240,190,120);ellipse(0,-r-5,5,9);}
+  pop();
+}
+</script>
+</body>
+</html>
