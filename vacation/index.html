@@ -11,39 +11,50 @@
 </head>
 <body>
 <script>
-// ============ 参数区(极简:只有底鼓 + 躺椅) ============
+// ============ 参数区(底鼓 + 帆布躺椅,框架优先) ============
 const W=720,H=1280;
 const SNOWLINE=150;
-const CX=360, CY=600;         // 构图中心(主体居中偏上)
-// 3/4 帆布躺椅:一条连贯帆布(前低左 → 后高右)+ X 木架
-const SEAT_F={x:CX-210, y:CY+180};   // 帆布前沿(低,左)
-const BACK_T={x:CX+220, y:CY-170};   // 帆布后顶(高,右)
-const GLINE=CY+300;                  // 腿落地线
-const BODY={x:CX-4, y:CY+18, r:168}; // 底鼓(躺进帆布)
-// =====================================================
+// 帆布面四角(3/4 侧俯:后窄高·前宽低)
+const TL={x:286,y:474}, TR={x:470,y:516};   // 椅背上两角
+const FL={x:214,y:812}, FR={x:512,y:782};   // 座前两角
+// 椅背立柱顶(高出帆布)
+const PL={x:300,y:430}, PR={x:486,y:478};
+// 底鼓(躺进帆布)
+const BODY={x:366,y:628,r:150};
+// 木框颜色
+const WOOD=[247,205,110], WOOD_D=[206,162,84], WOOD_L=[255,228,158];
+const FAB=[[245,206,102],[231,184,74]];
+// 落地/腿
+const FLF={x:250,y:980}, FRF={x:470,y:980};  // 前脚
+const BLF={x:410,y:980}, BRF={x:620,y:940};  // 后脚
+// =========================================================
 let S=1,t0=0,snow=[],sparkle=[],drips=[];
 function setup(){const s=min(windowWidth/W,windowHeight/H);S=s;createCanvas(W*s,H*s);frameRate(60);reset();}
 function reset(){t0=millis()/1000;drips=[];randomSeed(9);
   snow=[];for(let i=0;i<64;i++)snow.push({x:random(W),y:random(SNOWLINE,H),r:random(2,4.5),ph:random(TWO_PI)});
-  sparkle=[];for(let i=0;i<50;i++)sparkle.push({x:random(W),y:random(SNOWLINE+40,H),ph:random(TWO_PI)});}
+  sparkle=[];for(let i=0;i<48;i++)sparkle.push({x:random(W),y:random(SNOWLINE+40,H),ph:random(TWO_PI)});}
 function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
 function mousePressed(){reset();}
 function T(){return millis()/1000-t0;}
-function breathe(t){return 1+0.035*sin(t*1.5);}
+function breathe(t){return 1+0.03*sin(t*1.5);}
+function lerpP(a,b,u){return {x:lerp(a.x,b.x,u),y:lerp(a.y,b.y,u)};}
+function woodLine(a,b,w){stroke(WOOD_D[0],WOOD_D[1],WOOD_D[2]);strokeWeight(w+4);strokeCap(ROUND);line(a.x,a.y,b.x,b.y);
+  stroke(WOOD[0],WOOD[1],WOOD[2]);strokeWeight(w);line(a.x,a.y,b.x,b.y);
+  stroke(WOOD_L[0],WOOD_L[1],WOOD_L[2]);strokeWeight(max(1,w*0.3));line(a.x-1,a.y-1,b.x-1,b.y-1);}
 
 function draw(){
   scale(S);const t=T(),dt=min(deltaTime/1000,0.05);
   drawSky(t);drawGround(t);
-  drawChairBehind();    // 后腿 + 整条帆布(在身后)
-  drawBass(t,dt);       // 底鼓躺进帆布
-  drawChairFront();     // 帆布前沿 + 前腿(压在身前=陷进去)
+  drawChairBack();     // 后腿+椅背立柱+帆布(身后)
+  drawBass(t,dt);      // 底鼓躺着
+  drawChairFront();    // 侧扶手+前横杆+前腿(身前,兜住)
 }
 
 // ---------------- 天空 + 太阳 ----------------
 function drawSky(t){
   for(let y=0;y<SNOWLINE+40;y+=6){const k=y/(SNOWLINE+40);
     stroke(lerpColor(color(126,198,232),color(206,235,246),k));strokeWeight(6);line(0,y,W,y);}
-  const sx=592,sy=118;noStroke();
+  const sx=592,sy=112;noStroke();
   for(let r=180;r>0;r-=12)fill(255,240,150,7),circle(sx,sy,r*2);
   push();translate(sx,sy);stroke(255,232,120,170);strokeWeight(5);
   for(let k=0;k<14;k++){const a=t*0.3+k*TWO_PI/14,L=70+8*sin(t*3+k);line(cos(a)*L,sin(a)*L,cos(a)*(L+24),sin(a)*(L+24));}
@@ -64,72 +75,66 @@ function drawGround(t){
     line(s.x-3,s.y,s.x+3,s.y);line(s.x,s.y-3,s.x,s.y+3);}
   noStroke();for(const f of snow){f.y+=(10+f.r*4)*deltaTime/1000;const x=f.x+sin(t*0.6+f.ph)*14;
     fill(255,255,255,180);circle(x,f.y,f.r*1.6);if(f.y>H+6){f.y=SNOWLINE-6;f.x=random(W);}}
-  // 躺椅长投影
-  fill(150,172,204,80);push();translate(CX+20,GLINE+18);rotate(-0.24);ellipse(0,0,560,110);pop();
+  // 躺椅长投影(往右下)
+  fill(150,172,204,85);push();translate(470,995);rotate(-0.2);ellipse(0,0,560,120);pop();
 }
-// ---------------- 帆布躺椅(一整条帆布 + X 木架) ----------------
-// 帆布轴:SEAT_F(前低) → BACK_T(后高);法线方向 nx,ny
-function axis(){const dx=BACK_T.x-SEAT_F.x,dy=BACK_T.y-SEAT_F.y,len=sqrt(dx*dx+dy*dy);
-  return {dx,dy,len,ux:dx/len,uy:dy/len,nx:-dy/len,ny:dx/len};}
-function slatBand(u0,u1,wid){
-  const a=axis(),n=max(2,round((u1-u0)*10));
-  for(let i=0;i<n;i++){const u=u0+(u1-u0)*i/n,v=u0+(u1-u0)*(i+1)/n;
-    fill(i%2?[249,208,98]:[233,186,76]);
-    const ax=SEAT_F.x+a.dx*u,ay=SEAT_F.y+a.dy*u,bx=SEAT_F.x+a.dx*v,by=SEAT_F.y+a.dy*v;
-    quad(ax+a.nx*wid,ay+a.ny*wid, bx+a.nx*wid,by+a.ny*wid, bx-a.nx*wid,by-a.ny*wid, ax-a.nx*wid,ay-a.ny*wid);}
+// ---------------- 帆布面(整块) ----------------
+function fabric(){
+  // 沿 TL→FL 与 TR→FR 之间铺横条
+  const n=9;
+  for(let i=0;i<n;i++){const u=i/n,v=(i+1)/n;
+    const a=lerpP(TL,FL,u),b=lerpP(TR,FR,u),c=lerpP(TR,FR,v),d=lerpP(TL,FL,v);
+    fill(...(i%2?FAB[0]:FAB[1]));noStroke();quad(a.x,a.y,b.x,b.y,c.x,c.y,d.x,d.y);}
 }
-function drawChairBehind(){
-  const a=axis();
-  // 后腿(从帆布后段斜插地面,X 的一根)
-  stroke(174,130,72);strokeWeight(14);strokeCap(ROUND);
-  const hb={x:SEAT_F.x+a.dx*0.62,y:SEAT_F.y+a.dy*0.62};   // 铰接点
-  line(hb.x,hb.y, CX-70,GLINE);
-  // 帆布主体(整条,后半在身后)
-  fill(160,120,66);                 // 帆布下木边
-  const eb={x:BACK_T.x+a.ux*22,y:BACK_T.y+a.uy*22};
-  slatBand(0.0,1.0, 78);
-  // 后顶横木
-  stroke(196,148,84);strokeWeight(13);
-  line(BACK_T.x-a.nx*78,BACK_T.y-a.ny*78, BACK_T.x+a.nx*78,BACK_T.y+a.ny*78);
+// ---------------- 椅框:身后部分 ----------------
+function drawChairBack(){
+  // 后腿(X 的后半,先画,在最底层)
+  const hL=lerpP(TL,FL,0.5), hR=lerpP(TR,FR,0.5);
+  woodLine(hR,BRF,14); woodLine(hL,BLF,14);
+  woodLine(BLF,BRF,11);                    // 后脚横撑
+  // 帆布
+  fabric();
+  // 椅背立柱(超出帆布)+ 顶横杆
+  woodLine(TL,PL,15); woodLine(TR,PR,15);
+  woodLine(PL,PR,12);
+  noStroke();fill(WOOD_L[0],WOOD_L[1],WOOD_L[2]);circle(PL.x,PL.y,17);circle(PR.x,PR.y,17);
 }
+// ---------------- 椅框:身前部分(兜住底鼓) ----------------
 function drawChairFront(){
-  const a=axis();
-  // 帆布前沿的一小段(压在底鼓身前,显出"陷进去")
-  slatBand(0.0,0.28, 78);
-  // 前横木
-  stroke(196,148,84);strokeWeight(13);strokeCap(ROUND);
-  line(SEAT_F.x-a.nx*82,SEAT_F.y-a.ny*82, SEAT_F.x+a.nx*82,SEAT_F.y+a.ny*82);
-  // 前腿(X 的另一根,从前沿斜插右下)
-  stroke(174,130,72);strokeWeight(14);
-  line(SEAT_F.x,SEAT_F.y, CX+90,GLINE);
-  // 一根短撑
-  line(SEAT_F.x+a.nx*70,SEAT_F.y+a.ny*70, CX-30,GLINE);
+  // 侧扶手/侧框(沿帆布左右边)
+  woodLine(TL,FL,15); woodLine(TR,FR,15);
+  // 前横杆(座前沿,略微前探)
+  const fl2={x:FL.x-6,y:FL.y+4}, fr2={x:FR.x+6,y:FR.y+4};
+  woodLine(fl2,fr2,15);
+  // 前腿(X 的前半)+ 前脚横撑
+  woodLine(FL,FLF,14); woodLine(FR,FRF,14);
+  woodLine(FLF,FRF,11);
 }
 // ---------------- 底鼓(躺着晒太阳) ----------------
 function drawBass(t,dt){
-  const br=breathe(t);
-  if(random()<0.02)drips.push({x:BODY.x+random(-BODY.r*0.6,BODY.r*0.6),y:BODY.y+BODY.r*0.66,age:0});
-  push();translate(BODY.x,BODY.y);rotate(radians(-18));scale(1,br);
-  const R=BODY.r;noStroke();
-  fill(150,180,214);ellipse(0,0,R*2.14,R*2.0);        // 蓝白描边
-  fill(126,74,50);ellipse(0,0,R*2.0,R*1.86);          // 木箍
-  fill(252,254,255);ellipse(0,0,R*1.72,R*1.58);       // 白鼓面(圆肚子)
-  fill(210,222,238,110);ellipse(R*0.34,R*0.3,R*1.1,R*0.9);
-  // 墨镜(架在鼓面上沿,朝天)
-  fill(34,36,44);ellipse(-R*0.34,-R*0.34,R*0.42,R*0.36);ellipse(R*0.16,-R*0.4,R*0.42,R*0.36);
-  stroke(34,36,44);strokeWeight(6);line(-R*0.16,-R*0.36,-R*0.02,-R*0.4);
-  line(-R*0.55,-R*0.36,-R*0.7,-R*0.4);line(R*0.37,-R*0.42,R*0.52,-R*0.46);
-  noStroke();fill(150,190,225,150);ellipse(-R*0.42,-R*0.4,R*0.12,R*0.08);ellipse(R*0.08,-R*0.46,R*0.12,R*0.08);
-  // 微笑 + 腮红(享受)
-  noFill();stroke(150,120,90);strokeWeight(4);arc(-R*0.06,R*0.14,R*0.4,R*0.24,0.2,PI-0.2);
-  noStroke();fill(240,150,150,150);ellipse(-R*0.66,-R*0.02,R*0.2,R*0.13);ellipse(R*0.5,-R*0.08,R*0.2,R*0.13);
-  // 防晒霜两道
-  fill(255,255,255,220);ellipse(-R*0.2,R*0.36,R*0.28,R*0.1);ellipse(R*0.2,R*0.5,R*0.3,R*0.1);
+  const br=breathe(t),R=BODY.r;
+  if(random()<0.02)drips.push({x:BODY.x+random(-R*0.6,R*0.6),y:BODY.y+R*0.66,age:0});
+  push();translate(BODY.x,BODY.y);rotate(radians(-16));scale(1,br);
+  noStroke();
+  fill(150,180,214);ellipse(0,0,R*2.14,R*2.0);
+  fill(126,74,50);ellipse(0,0,R*2.0,R*1.86);
+  // 银色调音耳一圈(像参考图)
+  fill(206,210,220);for(let k=0;k<12;k++){const a=k*TWO_PI/12;
+    push();translate(cos(a)*R*0.88,sin(a)*R*0.82);rotate(a);ellipse(0,0,10,15);pop();}
+  fill(252,254,255);ellipse(0,0,R*1.62,R*1.5);          // 白鼓面肚子
+  fill(210,222,238,110);ellipse(R*0.32,R*0.3,R*1.0,R*0.8);
+  // 墨镜(架鼓面上沿)
+  fill(34,36,44);ellipse(-R*0.32,-R*0.36,R*0.4,R*0.34);ellipse(R*0.16,-R*0.42,R*0.4,R*0.34);
+  stroke(34,36,44);strokeWeight(6);line(-R*0.14,-R*0.38,-R*0.02,-R*0.42);
+  line(-R*0.52,-R*0.38,-R*0.66,-R*0.42);line(R*0.36,-R*0.44,R*0.5,-R*0.48);
+  noStroke();fill(150,190,225,150);ellipse(-R*0.4,-R*0.42,R*0.1,R*0.07);ellipse(R*0.08,-R*0.48,R*0.1,R*0.07);
+  // 微笑 + 腮红
+  noFill();stroke(150,120,90);strokeWeight(4);arc(-R*0.04,R*0.12,R*0.4,R*0.24,0.2,PI-0.2);
+  noStroke();fill(240,150,150,150);ellipse(-R*0.64,-R*0.02,R*0.19,R*0.12);ellipse(R*0.48,-R*0.08,R*0.19,R*0.12);
+  fill(255,255,255,220);ellipse(-R*0.18,R*0.34,R*0.26,R*0.09);ellipse(R*0.2,R*0.48,R*0.28,R*0.09); // 防晒霜
   pop();
-  // 滴水 + 水洼
   drips=drips.filter(d=>{d.age+=dt;return d.age<1.1;});
   noStroke();for(const d of drips){fill(150,205,235,220*(1-d.age/1.1));ellipse(d.x,d.y+d.age*d.age*440,4,7);}
-  fill(150,205,235,110);ellipse(BODY.x-10,GLINE-6,BODY.r*1.2+10*sin(t),18);
 }
 </script>
 </body>
