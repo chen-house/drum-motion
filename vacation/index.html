@@ -5,276 +5,122 @@
 <title>雪人的假期</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <style>
-  html,body{margin:0;padding:0;background:#bfe6f2;height:100%;overflow:hidden}
+  html,body{margin:0;padding:0;background:#cfeaf5;height:100%;overflow:hidden}
   canvas{display:block;margin:0 auto}
 </style>
 </head>
 <body>
 <script>
-// ================= 参数区 =================
+// ============ 参数区(极简:只有底鼓 + 躺椅) ============
 const W=720,H=1280;
-const T_STEAL=5.0;    // 捣蛋鬼A 去偷遮阳伞
-const T_DROP1=6.2;    // 伞罩下来(小钟)
-const T_TRY2=7.9;     // 再试
-const T_DROP2=9.1;    // 又掉
-const T_TAKE=10.3;    // 雪人拿回伞插好
-const T_STOMP=11.6;   // 认了,蹦回去
-const SNOWLINE=150;   // 天/地分界
-// —— 3/4 侧俯躺椅几何(全部姿态以此为骨架)——
-const CX=352;
-const GY=1060;                       // 雪面接触基准
-const SEAT_F={x:CX-172, y:GY-52};    // 座前沿(低,靠左)
-const SEAT_H={x:CX+26,  y:GY-150};   // 座与靠背铰接
-const BACK_T={x:CX+120, y:GY-350};   // 靠背顶(高,靠右)
-// 雪人(顺着躺椅斜靠)
-const BODY={x:CX-52, y:GY-158, r:104};   // 肚子(底鼓面)
-const HEAD={x:CX+66, y:GY-262, r:64};    // 头(军鼓面,枕在椅背)
-const PARA={x:CX+186, baseY:GY-20};      // 遮阳伞杆脚
-const PARA_TOP={x:CX+96, y:GY-392};      // 伞面中心
-// ==========================================
-let S=1,t0=0,snow=[],sparkle=[],drips=[],flakes=[],restingDrum=null;
-
+const SNOWLINE=150;
+const CX=360, CY=720;         // 构图中心(主体居中偏上)
+// 3/4 帆布躺椅骨架(后高右、前低左)
+const SEAT_F={x:CX-186, y:CY+150};   // 座前沿
+const SEAT_H={x:CX+70,  y:CY+70};    // 座/靠背铰接
+const BACK_T={x:CX+186, y:CY-150};   // 靠背顶
+const BODY={x:CX-6, y:CY+30, r:150}; // 底鼓(躺着的身子)
+// =====================================================
+let S=1,t0=0,snow=[],sparkle=[],drips=[];
 function setup(){const s=min(windowWidth/W,windowHeight/H);S=s;createCanvas(W*s,H*s);frameRate(60);reset();}
-function reset(){
-  t0=millis()/1000;drips=[];flakes=[];restingDrum=null;
-  randomSeed(9);
-  snow=[];for(let i=0;i<70;i++)snow.push({x:random(W),y:random(SNOWLINE,H),r:random(2,4.5),ph:random(TWO_PI)});
-  sparkle=[];for(let i=0;i<56;i++)sparkle.push({x:random(W),y:random(SNOWLINE+40,H),ph:random(TWO_PI)});
-}
+function reset(){t0=millis()/1000;drips=[];randomSeed(9);
+  snow=[];for(let i=0;i<64;i++)snow.push({x:random(W),y:random(SNOWLINE,H),r:random(2,4.5),ph:random(TWO_PI)});
+  sparkle=[];for(let i=0;i<50;i++)sparkle.push({x:random(W),y:random(SNOWLINE+40,H),ph:random(TWO_PI)});}
 function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
 function mousePressed(){reset();}
-function ez(x){x=constrain(x,0,1);return x*x*(3-2*x);}
-function seg(t,a,b){return ez((t-a)/(b-a));}
 function T(){return millis()/1000-t0;}
-function hop(u,h){return -4*h*u*(1-u);}
-function breathe(t){return 1+0.03*sin(t*1.4);}    // 肚子起伏
-function headLoll(t){return radians(3*sin(t*0.8));}// 头轻晃
+function breathe(t){return 1+0.035*sin(t*1.5);}
 
-// ================== 主循环 ==================
 function draw(){
-  scale(S);
-  const t=T(),dt=min(deltaTime/1000,0.05);
-  drawSky(t);
-  drawSnowGround(t);
-  drawChairBack(t);       // 椅背(在雪人身后)
-  drawSnowman(t,dt);      // 躺平的雪人
-  drawChairFront(t);      // 座前沿+前腿(压在身前,像陷进去)
-  drawParasol(t,dt);      // 遮阳伞(镲片伞面)
-  drawDrink(t);
-  drawStickA(t,dt);
-  drawStickB(t,dt);
-  updateFlakes(t,dt);
+  scale(S);const t=T(),dt=min(deltaTime/1000,0.05);
+  drawSky(t);drawGround(t);
+  drawChairBack();      // 椅背在身后
+  drawBass(t,dt);       // 底鼓躺着
+  drawChairFront();     // 座+前腿压在身前
 }
 
 // ---------------- 天空 + 太阳 ----------------
 function drawSky(t){
   for(let y=0;y<SNOWLINE+40;y+=6){const k=y/(SNOWLINE+40);
-    stroke(lerpColor(color(120,196,232),color(202,233,245),k));strokeWeight(6);line(0,y,W,y);}
-  const sx=572,sy=132;noStroke();
-  for(let r=190;r>0;r-=12)fill(255,240,150,7),circle(sx,sy,r*2);
+    stroke(lerpColor(color(126,198,232),color(206,235,246),k));strokeWeight(6);line(0,y,W,y);}
+  const sx=592,sy=118;noStroke();
+  for(let r=180;r>0;r-=12)fill(255,240,150,7),circle(sx,sy,r*2);
   push();translate(sx,sy);stroke(255,232,120,170);strokeWeight(5);
-  for(let k=0;k<14;k++){const a=t*0.3+k*TWO_PI/14,L=78+8*sin(t*3+k);line(cos(a)*L,sin(a)*L,cos(a)*(L+26),sin(a)*(L+26));}
-  pop();
-  noStroke();fill(255,244,150);circle(sx,sy,116);fill(255,250,205);circle(sx-8,sy-8,86);
-  fill(40,40,50);ellipse(sx-24,sy-4,30,26);ellipse(sx+24,sy-4,30,26);
-  stroke(40,40,50);strokeWeight(5);line(sx-9,sy-6,sx+9,sy-6);noStroke();
-  noFill();stroke(210,150,60);strokeWeight(4);arc(sx,sy+24,40,26,0.2,PI-0.2);noStroke();
-  fill(255,255,255,150);ellipse(150,86,120,36);ellipse(120,76,70,28);ellipse(190,80,80,30);
+  for(let k=0;k<14;k++){const a=t*0.3+k*TWO_PI/14,L=70+8*sin(t*3+k);line(cos(a)*L,sin(a)*L,cos(a)*(L+24),sin(a)*(L+24));}
+  pop();noStroke();fill(255,244,150);circle(sx,sy,104);fill(255,250,205);circle(sx-8,sy-8,76);
+  fill(255,255,255,150);ellipse(150,84,120,34);ellipse(120,74,68,26);ellipse(190,78,78,28);
 }
-
 // ---------------- 雪地 ----------------
-function drawSnowGround(t){
-  noStroke();
-  fill(238,245,252);rect(0,SNOWLINE,W,H-SNOWLINE);
+function drawGround(t){
+  noStroke();fill(238,245,252);rect(0,SNOWLINE,W,H-SNOWLINE);
   fill(228,238,250);ellipse(120,SNOWLINE+40,460,120);ellipse(600,SNOWLINE+30,520,120);
-  fill(248,251,255);ellipse(360,SNOWLINE+90,900,180);
+  fill(248,251,255);ellipse(360,SNOWLINE+92,900,180);
   fill(196,214,236,140);ellipse(520,SNOWLINE+70,300,50);
-  randomSeed(3);
-  for(let i=0;i<300;i++){const gx=random(W),gy=random(SNOWLINE+10,H);
+  randomSeed(3);for(let i=0;i<300;i++){const gx=random(W),gy=random(SNOWLINE+10,H);
     fill(random()<0.5?200:255,random()<0.5?214:255,random()<0.5?236:255,80);rect(gx,gy,2.2,2.2);}
   randomSeed(millis());
   for(const s of sparkle){const a=abs(sin(t*2+s.ph));if(a<0.6)continue;
     stroke(255,255,255,180*(a-0.6)/0.4);strokeWeight(1.2);
     line(s.x-3,s.y,s.x+3,s.y);line(s.x,s.y-3,s.x,s.y+3);}
-  noStroke();
-  for(const f of snow){f.y+=(10+f.r*4)*deltaTime/1000;const x=f.x+sin(t*0.6+f.ph)*14;
+  noStroke();for(const f of snow){f.y+=(10+f.r*4)*deltaTime/1000;const x=f.x+sin(t*0.6+f.ph)*14;
     fill(255,255,255,180);circle(x,f.y,f.r*1.6);if(f.y>H+6){f.y=SNOWLINE-6;f.x=random(W);}}
-  // 躺椅在雪地上的长投影(往右下)
-  fill(150,172,204,90);
-  push();translate(CX+40,GY+14);rotate(-0.28);ellipse(0,0,430,90);pop();
+  // 躺椅长投影
+  fill(150,172,204,80);push();translate(CX+30,CY+210);rotate(-0.26);ellipse(0,0,540,110);pop();
 }
-
-// ---------------- 躺椅:背 & 前(3/4 侧俯) ----------------
-function chairSlats(ax,ay,bx,by,wid,n,c1,c2){
-  // 沿 a→b 铺横条(帆布纹),wid 为条带半宽(法线方向)
+// ---------------- 帆布躺椅(3/4) ----------------
+function slats(ax,ay,bx,by,wid,n){
   const dx=bx-ax,dy=by-ay,len=sqrt(dx*dx+dy*dy),nx=-dy/len,ny=dx/len;
-  for(let i=0;i<n;i++){const u=i/n,v=(i+1)/n;
-    fill(i%2?c1:c2);
+  for(let i=0;i<n;i++){const u=i/n,v=(i+1)/n;fill(i%2?[249,208,98]:[235,188,78]);
     quad(ax+dx*u+nx*wid,ay+dy*u+ny*wid, ax+dx*v+nx*wid,ay+dy*v+ny*wid,
          ax+dx*v-nx*wid,ay+dy*v-ny*wid, ax+dx*u-nx*wid,ay+dy*u-ny*wid);}
 }
-function drawChairBack(t){
-  // 靠背框(两根斜杆 + 顶横杆)在雪人后
-  stroke(198,150,86);strokeWeight(13);strokeCap(ROUND);noFill();
-  line(SEAT_H.x, SEAT_H.y, BACK_T.x, BACK_T.y);
-  line(SEAT_H.x-70, SEAT_H.y+6, BACK_T.x-70, BACK_T.y+6);
-  line(BACK_T.x, BACK_T.y, BACK_T.x-70, BACK_T.y+6);
-  // 靠背帆布(黄条纹)
-  chairSlats(SEAT_H.x-35,SEAT_H.y+3, BACK_T.x-35,BACK_T.y+3, 42, 6,[247,206,96],[236,190,80]);
-  // 后腿(向右下撑地,X 形的一半)
-  stroke(176,132,74);strokeWeight(12);
-  line(SEAT_H.x+6,SEAT_H.y+40, SEAT_H.x+120,GY+8);
+function drawChairBack(){
+  // 靠背斜框
+  stroke(196,148,84);strokeWeight(14);strokeCap(ROUND);noFill();
+  line(SEAT_H.x,SEAT_H.y, BACK_T.x,BACK_T.y);
+  line(SEAT_H.x-96,SEAT_H.y+18, BACK_T.x-96,BACK_T.y+18);
+  line(BACK_T.x,BACK_T.y, BACK_T.x-96,BACK_T.y+18);
+  // 靠背帆布
+  slats(SEAT_H.x-48,SEAT_H.y+9, BACK_T.x-48,BACK_T.y+9, 58, 6);
+  // 后腿(撑向右下)
+  stroke(174,130,72);strokeWeight(13);line(SEAT_H.x+2,SEAT_H.y+54, SEAT_H.x+150,CY+230);
 }
-function drawChairFront(t){
-  // 座前沿帆布 + 前腿(压在雪人身前一点,像陷进去)
-  chairSlats(SEAT_F.x,SEAT_F.y, SEAT_H.x-8,SEAT_H.y+10, 40, 6,[247,206,96],[236,190,80]);
+function drawChairFront(){
+  // 座面帆布(前沿→铰接)
+  slats(SEAT_F.x,SEAT_F.y, SEAT_H.x-10,SEAT_H.y+14, 54, 6);
   // 前横木
-  stroke(198,150,86);strokeWeight(12);strokeCap(ROUND);
-  line(SEAT_F.x-8,SEAT_F.y+6, SEAT_F.x+150,SEAT_F.y-30);
-  // 前腿
-  stroke(176,132,74);strokeWeight(12);
-  line(SEAT_F.x+8,SEAT_F.y+2, SEAT_F.x-30,GY+8);
-  line(SEAT_F.x+120,SEAT_F.y-26, SEAT_F.x+150,GY+6);
+  stroke(196,148,84);strokeWeight(13);strokeCap(ROUND);
+  line(SEAT_F.x-10,SEAT_F.y+8, SEAT_F.x+150,SEAT_F.y-40);
+  // 前腿(两根撑地)
+  stroke(174,130,72);strokeWeight(13);
+  line(SEAT_F.x+6,SEAT_F.y+2, SEAT_F.x-40,CY+232);
+  line(SEAT_F.x+150,SEAT_F.y-36, SEAT_F.x+186,CY+228);
 }
-
-// ---------------- 躺平的雪人(两个白鼓面) ----------------
-function drawSnowman(t,dt){
-  const br=breathe(t), loll=headLoll(t);
-  if(random()<0.02)drips.push({x:BODY.x+random(-BODY.r*0.6,BODY.r*0.6),y:BODY.y+BODY.r*0.7,age:0});
-  // —— 肚子(底鼓面,朝天,微微起伏)——
-  push();translate(BODY.x,BODY.y);rotate(radians(-14));scale(1,br);
-  noStroke();
-  fill(150,180,214);ellipse(0,0,BODY.r*2.14,BODY.r*2.0);   // 蓝白描边
-  fill(126,74,50);ellipse(0,0,BODY.r*2.0,BODY.r*1.86);      // 木箍
-  fill(252,254,255);ellipse(0,0,BODY.r*1.72,BODY.r*1.6);    // 白鼓面肚子
-  fill(210,222,238,110);ellipse(BODY.r*0.34,BODY.r*0.3,BODY.r*1.1,BODY.r*0.9);
-  fill(60,62,72);circle(-6,-BODY.r*0.16,10);circle(2,BODY.r*0.18,9);  // 煤扣子
-  fill(255,255,255,220);ellipse(-30,-8,24,9);ellipse(20,14,26,9);     // 防晒霜
+// ---------------- 底鼓(躺着晒太阳) ----------------
+function drawBass(t,dt){
+  const br=breathe(t);
+  if(random()<0.02)drips.push({x:BODY.x+random(-BODY.r*0.6,BODY.r*0.6),y:BODY.y+BODY.r*0.66,age:0});
+  push();translate(BODY.x,BODY.y);rotate(radians(-18));scale(1,br);
+  const R=BODY.r;noStroke();
+  fill(150,180,214);ellipse(0,0,R*2.14,R*2.0);        // 蓝白描边
+  fill(126,74,50);ellipse(0,0,R*2.0,R*1.86);          // 木箍
+  fill(252,254,255);ellipse(0,0,R*1.72,R*1.58);       // 白鼓面(圆肚子)
+  fill(210,222,238,110);ellipse(R*0.34,R*0.3,R*1.1,R*0.9);
+  // 墨镜(架在鼓面上沿,朝天)
+  fill(34,36,44);ellipse(-R*0.34,-R*0.34,R*0.42,R*0.36);ellipse(R*0.16,-R*0.4,R*0.42,R*0.36);
+  stroke(34,36,44);strokeWeight(6);line(-R*0.16,-R*0.36,-R*0.02,-R*0.4);
+  line(-R*0.55,-R*0.36,-R*0.7,-R*0.4);line(R*0.37,-R*0.42,R*0.52,-R*0.46);
+  noStroke();fill(150,190,225,150);ellipse(-R*0.42,-R*0.4,R*0.12,R*0.08);ellipse(R*0.08,-R*0.46,R*0.12,R*0.08);
+  // 微笑 + 腮红(享受)
+  noFill();stroke(150,120,90);strokeWeight(4);arc(-R*0.06,R*0.14,R*0.4,R*0.24,0.2,PI-0.2);
+  noStroke();fill(240,150,150,150);ellipse(-R*0.66,-R*0.02,R*0.2,R*0.13);ellipse(R*0.5,-R*0.08,R*0.2,R*0.13);
+  // 防晒霜两道
+  fill(255,255,255,220);ellipse(-R*0.2,R*0.36,R*0.28,R*0.1);ellipse(R*0.2,R*0.5,R*0.3,R*0.1);
   pop();
-  // —— 翘起的小脚(搭在座前沿)——
-  push();translate(SEAT_F.x+30,SEAT_F.y-30);
-  const wig=sin(t*2.4)*3;
-  noStroke();fill(150,180,214);
-  ellipse(-2+wig,0,42,30);ellipse(30-wig,6,42,30);
-  fill(252,254,255);ellipse(-2+wig,-1,34,22);ellipse(30-wig,5,34,22);
-  pop();
-  // —— 头(军鼓面,枕在椅背,墨镜朝天)——
-  push();translate(HEAD.x,HEAD.y);rotate(radians(-24)+loll);
-  noStroke();
-  fill(150,180,214);ellipse(0,0,HEAD.r*2.16,HEAD.r*2.0);
-  fill(126,74,50);ellipse(0,0,HEAD.r*2.0,HEAD.r*1.86);
-  fill(250,252,255);ellipse(0,0,HEAD.r*1.7,HEAD.r*1.56);   // 白脸
-  // 腮红
-  fill(240,150,150,150);ellipse(-HEAD.r*0.6,HEAD.r*0.12,20,13);ellipse(HEAD.r*0.62,HEAD.r*0.12,20,13);
-  // 墨镜
-  fill(34,36,44);ellipse(-20,-6,32,28);ellipse(22,-6,32,28);
-  stroke(34,36,44);strokeWeight(5);line(-5,-8,7,-8);line(-37,-10,-52,-14);line(39,-10,54,-14);
-  noStroke();fill(150,190,225,150);ellipse(-26,-12,9,6);ellipse(16,-12,9,6);
-  // 张嘴打哈欠(躺平的惬意)
-  fill(150,90,96);ellipse(0,HEAD.r*0.5,20,14);fill(240,140,140);ellipse(0,HEAD.r*0.56,10,6);
-  pop();
-  // 滴水 + 脚下水洼
+  // 滴水 + 水洼
   drips=drips.filter(d=>{d.age+=dt;return d.age<1.1;});
-  noStroke();for(const d of drips){fill(150,205,235,220*(1-d.age/1.1));ellipse(d.x,d.y+d.age*d.age*420,4,7);}
-  fill(150,205,235,110);ellipse(BODY.x-10,GY+2,BODY.r*1.5+10*sin(t),16);
-}
-
-// ---------------- 遮阳伞(镲片伞面) ----------------
-function paraCanopy(cx,cy,scl){
-  push();translate(cx,cy);scale(scl,scl);
-  noStroke();
-  fill(150,180,214);ellipse(0,0,168,50);
-  fill(212,120,110);ellipse(0,0,158,44);       // 红伞面(镲片)
-  fill(236,150,140);ellipse(0,-5,104,26);
-  fill(255,210,200);ellipse(0,-9,36,13);
-  stroke(150,80,72);strokeWeight(2);for(let k=-3;k<=3;k++)line(0,0,k*24,12);
-  pop();
-}
-function drawParasol(t,dt){
-  const stolen=(t>T_STEAL+0.2 && t<T_TAKE);
-  if(stolen)return;
-  // 伞杆(从雪地插上来,略斜,给头遮荫)
-  stroke(150,110,70);strokeWeight(7);strokeCap(ROUND);
-  line(PARA.x,PARA.baseY, PARA_TOP.x,PARA_TOP.y);
-  noStroke();fill(150,172,204,120);ellipse(PARA.x,PARA.baseY+6,40,12);
-  paraCanopy(PARA_TOP.x,PARA_TOP.y+2*sin(t*1.1), 1.0);
-}
-
-// ---------------- 冷饮 ----------------
-function drawDrink(t){
-  push();translate(SEAT_F.x-4,SEAT_F.y-70);
-  noStroke();fill(120,86,60);ellipse(0,0,44,52);fill(152,112,80);ellipse(0,-4,36,32);
-  fill(255,255,255,180);ellipse(-8,-6,10,14);
-  stroke(240,120,120);strokeWeight(5);line(8,-10,22,-50);noStroke();
-  push();translate(26,-56);rotate(0.3);fill(240,120,120);arc(0,0,46,46,PI,TWO_PI);
-  stroke(150,110,70);strokeWeight(3);line(0,0,0,16);noStroke();
-  fill(255,240,120);triangle(-23,0,-13,0,-18,-7);pop();
-  pop();
-}
-
-// ---------------- 捣蛋鬼A:偷伞→小钟 ----------------
-function stickBody(){
-  const L=86;noStroke();fill(140,100,68);
-  beginShape();vertex(-7,0);vertex(-5,-L);vertex(5,-L);vertex(7,0);endShape(CLOSE);
-  fill(210,166,120);beginShape();vertex(-5.4,0);vertex(-3.8,-L);vertex(3.8,-L);vertex(5.4,0);endShape(CLOSE);
-  fill(214,170,124);ellipse(0,-L-9,22,20);fill(240,206,160);ellipse(-3,-L-13,10,7);
-  fill(60,42,30);ellipse(-4,-L-9,5,5);ellipse(4,-L-9,5,5);
-  fill(255,255,255,225);circle(-3,-L-10.3,1.6);circle(5,-L-10.3,1.6);
-  fill(238,146,116,140);ellipse(-8,-L-5,5.5,3.5);ellipse(8,-L-5,5.5,3.5);
-}
-function bellDome(x,footY,wob){
-  push();translate(x,footY);stroke(150,108,74);strokeWeight(7);strokeCap(ROUND);
-  line(-7,0,-13+wob,24);line(7,0,13-wob,24);pop();
-  paraCanopy(x,footY-52,1.15);
-}
-function drawStickA(t,dt){
-  const homeX=CX+206, homeY=GY-4;
-  if(t<T_STEAL){push();translate(homeX,homeY);rotate(radians(6*sin(t*1.6)));stickBody();pop();}
-  else if(t<T_DROP1){const k=seg(t,T_STEAL,T_DROP1);
-    const x=lerp(homeX,PARA_TOP.x,k),y=lerp(homeY,PARA_TOP.y+40,k)+hop(k,90);
-    push();translate(x,y);rotate(radians(18*sin(k*PI)));stickBody();
-    if(k>0.55){paraCanopy(0,-90,1.0);}pop();}
-  else if(t<T_TRY2)bellDome(CX+30,GY-4,sin(t*10)*2);
-  else if(t<T_DROP2){const k=seg(t,T_TRY2,T_DROP2);
-    push();translate(CX+30,GY-4+hop(k,34));stickBody();
-    paraCanopy(0,-90-(1-k)*3,1.15);pop();}
-  else if(t<T_TAKE)bellDome(CX+30,GY-4,sin(t*10)*2);
-  else if(t<T_STOMP){push();translate(CX+30,GY-4);rotate(radians(2*sin(t*3)));stickBody();
-    fill(90,70,50);textSize(20);text('?',10,-102);pop();}
-  else{const k=seg(t,T_STOMP,T_STOMP+1.4);const x=lerp(CX+30,homeX,k),y=homeY+(k<1?abs(sin(t*12))*6*(1-k):0);
-    push();translate(x,y);rotate(radians(6*sin(t*1.6)));stickBody();pop();}
-}
-// ---------------- 捣蛋鬼B:雪地里蹦跶捣乱 ----------------
-function drawStickB(t,dt){
-  const homeX=CX-196;let x=homeX+28*sin(t*0.8),y=GY-4,poke=0;
-  const phase=(t%5.0);
-  if(phase>3.0&&phase<4.2){const k=(phase-3.0)/1.2;
-    x=lerp(homeX,BODY.x-70,ez(min(k*2,1)))-(k>0.5?lerp(0,40,(k-0.5)*2):0);
-    y=GY-4+hop(k,20);poke=sin(k*PI)*18;}
-  push();translate(x,y);rotate(radians(-8*sin(t*1.7)+poke*0.3));stickBody();
-  if(poke>2){noFill();stroke(210,166,120);strokeWeight(5);strokeCap(ROUND);arc(6,-64,26,18,-0.6,0.8);}
-  pop();
-  if(phase>3.6&&phase<4.0){fill(230,80,80);textSize(20);text('!',HEAD.x-18,HEAD.y-46);}
-}
-
-// ---------------- 逆行小鼓雪花(彩蛋) ----------------
-function updateFlakes(t,dt){
-  if(!restingDrum && random()<dt/7*0.9)flakes.push({x:random(200,520),y:SNOWLINE-10,fx:null,age:0});
-  flakes=flakes.filter(f=>{f.age+=dt;f.fx=(f.fx??f.x)+((560-(f.fx??f.x))*dt*0.5);
-    f.y-= f.age<2.4?14*dt:-70*dt;
-    if(f.y>GY-8){restingDrum={x:min(f.fx,560),born:t};return false;}
-    drawMiniDrum(f.fx,f.y,t*1.4,false);return f.age<7;});
-  if(restingDrum){const age=t-restingDrum.born;drawMiniDrum(restingDrum.x,GY-8,0,true);if(age>6)restingDrum=null;}
-}
-function drawMiniDrum(x,y,rot,resting){
-  push();translate(x,y);rotate(resting?0:rot);const r=14;noStroke();
-  fill(120,150,180,60);ellipse(0,r*0.7,r*2,r*0.7);
-  fill(150,100,68);ellipse(0,r*0.4,r*2,r*0.9);
-  fill(252,254,255);ellipse(0,0,r*2,r*1.5);
-  stroke(180,150,110);strokeWeight(1.4);noFill();ellipse(0,0,r*1.4,r*1.0);
-  if(resting){noStroke();fill(40,40,50);ellipse(-5,-2,8,6);ellipse(5,-2,8,6);
-    fill(255,240,190,150);ellipse(-2,-r-6,5,10);ellipse(5,-r-10,4,8);}
-  pop();
+  noStroke();for(const d of drips){fill(150,205,235,220*(1-d.age/1.1));ellipse(d.x,d.y+d.age*d.age*440,4,7);}
+  fill(150,205,235,110);ellipse(BODY.x-10,CY+186,BODY.r*1.3+10*sin(t),18);
 }
 </script>
 </body>
