@@ -113,35 +113,41 @@ function drawSnowGround(t){
 }
 
 // ---------------- 沙滩椅(雪地里!笑点) ----------------
+// 一把清楚的条纹躺椅:靠背在雪人身后斜立,坐垫在身下,前面伸出脚踏
 function drawChair(t){
-  push();translate(CX,GROUND+8);
-  // 椅影
-  noStroke();fill(150,170,200,90);ellipse(20,44,360,34);
-  // 后腿/前腿
-  stroke(70,90,120);strokeWeight(9);strokeCap(ROUND);
-  line(150,40,90,-140);       // 靠背斜杆
-  line(-150,40,-150,-10);
-  // 座面(红白条纹布)——斜躺:后高前低
+  const seatY=GROUND+2;
+  // 影子
+  noStroke();fill(150,170,200,80);ellipse(CX+10,GROUND+34,420,40);
+  // ---- 靠背(在雪人身后,大而清楚) ----
+  push();translate(CX,seatY);
+  // 木框
+  stroke(74,92,120);strokeWeight(12);strokeCap(ROUND);noFill();
+  // 靠背两根立杆 + 顶横杆
+  line(-150,-6,-120,-250);line(150,-6,120,-250);line(-120,-250,120,-250);
+  // 靠背条纹布
   noStroke();
-  const x0=-160,y0=-10,x1=96,y1=-150;   // 座+靠背连成斜面
-  for(let i=0;i<9;i++){const a=i/9,b=(i+1)/9;
-    fill(i%2? [235,240,246]:[220,80,72]);
-    quad(lerp(x0,x1,a),lerp(y0,y1,a)+6, lerp(x0,x1,b),lerp(y0,y1,b)+6,
-         lerp(x0,x1,b),lerp(y0,y1,b)-18, lerp(x0,x1,a),lerp(y0,y1,a)-18);}
-  // 前扶手横杆
-  stroke(70,90,120);strokeWeight(8);line(-160,-10,-120,-40);
+  for(let i=0;i<8;i++){const a=i/8,b=(i+1)/8;
+    fill(i%2?[236,240,246]:[224,84,74]);
+    quad(lerp(-150,-120,0)+ a*270,-10-a*0, lerp(-150,-120,0)+ b*270,-10,
+         lerp(-120,120,b),-244, lerp(-120,120,a),-244);}
+  // 坐垫横条(身下,前伸)
+  for(let i=0;i<7;i++){const a=i/7,b=(i+1)/7;
+    fill(i%2?[236,240,246]:[224,84,74]);
+    quad(lerp(-150,-190,a),0+a*0, lerp(-150,-190,b),0,
+         lerp(-150,-190,b),34, lerp(-150,-190,a),34);}
+  // 脚踏(前腿)
+  stroke(74,92,120);strokeWeight(12);strokeCap(ROUND);
+  line(-190,34,-210,90);line(150,10,150,80);
   pop();
-  // 冷饮(插小伞的椰子)在雪人右手边
-  push();translate(CX+150,GROUND-70);
-  noStroke();fill(120,86,60);ellipse(0,0,44,52);
-  fill(150,110,78);ellipse(0,-4,36,34);
-  // 吸管
-  stroke(240,120,120);strokeWeight(5);line(6,-8,20,-46);
-  // 小纸伞
-  push();translate(24,-52);rotate(0.3);
-  fill(240,120,120);arc(0,0,44,44,PI,TWO_PI);
-  stroke(150,110,70);strokeWeight(2);line(0,0,0,16);
-  fill(255,240,120);triangle(-22,0,-14,0,-18,-6);pop();
+  // 冷饮(插小伞的椰子)扶手边
+  push();translate(CX+186,GROUND-52);
+  noStroke();fill(120,86,60);ellipse(0,0,46,54);fill(152,112,80);ellipse(0,-4,38,34);
+  fill(255,255,255,180);ellipse(-8,-6,10,14);
+  stroke(240,120,120);strokeWeight(5);line(8,-10,24,-52);
+  push();translate(28,-58);rotate(0.3);
+  fill(240,120,120);arc(0,0,50,50,PI,TWO_PI);
+  stroke(150,110,70);strokeWeight(3);line(0,0,0,18);
+  noStroke();fill(255,240,120);triangle(-25,0,-15,0,-20,-7);pop();
   pop();
 }
 
@@ -260,38 +266,41 @@ function drawStickB(t,dt){
   if(phase>3.6&&phase<4.0){fill(230,80,80);textSize(20);text('!',CX+44,HEADY-32);}
 }
 
-// ---------------- 雪花(迷你小鼓):逆行去晒太阳 ----------------
+// ---------------- 逆行的那片"雪花"=一面迷你小鼓 ----------------
+// 天上的雪本体交给 snow[](白色六角),这里只管那一片主动去晒太阳的小鼓,罕见、干净、是个彩蛋
+let restingDrum=null;   // 已摊在雪地晒太阳的那一片
 function updateFlakes(t,dt){
-  if(random()<0.02)flakes.push({rebel:random()<0.3,x:random(120,620),y:SNOW-20,
-    sp:random(26,52),sw:random(12,26),ph:random(TWO_PI),rot:random(TWO_PI),fx:null,rest:false,age:0});
+  // 每隔约 7 秒,放出一片逆行小鼓(若地上还没有正在晒的)
+  if(!restingDrum && random()<dt/7*0.9){
+    flakes.push({x:random(200,520),y:SNOW-10,fx:null,age:0});
+  }
   flakes=flakes.filter(f=>{
-    f.age+=dt;f.rot+=dt*1.1;
-    if(f.rebel){
-      // 逆行:先往上飘一段追太阳,再落到雪地上摊开晒
-      if(!f.rest){f.y-=f.sp*dt*0.4;f.fx=(f.fx??f.x)+((520-(f.fx??f.x))*dt*0.4);
-        if(f.age>2.6){f.rest=true;f.landY=GROUND-6;}
-        drawMiniDrum(f.fx,f.y,f.rot,true,false);}
-      else{drawMiniDrum(f.fx,GROUND-6,0,true,true);   // 摊在雪地晒
-        return f.age<9;}
-      return true;
-    }else{
-      f.y+=f.sp*dt;const x=f.x+sin(t*0.7+f.ph)*f.sw;
-      drawMiniDrum(x,f.y,f.rot,false,false);
-      return f.y<H+20;
-    }
+    f.age+=dt;
+    // 逆行:斜斜往太阳(右上)飘一会,再优雅地落到雪地上摊开
+    f.fx=(f.fx??f.x)+((560-(f.fx??f.x))*dt*0.5);
+    f.y-= f.age<2.4 ? 14*dt : -70*dt;    // 先升后落
+    if(f.y>GROUND-8){ restingDrum={x:min(f.fx,560),born:t}; return false; }
+    drawMiniDrum(f.fx,f.y, t*1.4, false);
+    return f.age<7;
   });
+  // 摊在雪地上晒太阳的那一片(戴小墨镜,冒热气,晒够就走)
+  if(restingDrum){
+    const age=t-restingDrum.born;
+    drawMiniDrum(restingDrum.x, GROUND-8, 0, true);
+    if(age>6) restingDrum=null;
+  }
 }
-function drawMiniDrum(x,y,rot,rebel,resting){
+function drawMiniDrum(x,y,rot,resting){
   push();translate(x,y);rotate(resting?0:rot);
-  const r=rebel?13:9;
+  const r=14;
   noStroke();
-  fill(150,100,68,rebel?255:210);ellipse(0,r*0.4,r*2,r*0.9);      // 侧壁
-  fill(rebel?255:238,rebel?250:246,rebel?255:255);ellipse(0,0,r*2,r*1.5); // 鼓面
-  stroke(180,150,110,200);strokeWeight(1.3);noFill();ellipse(0,0,r*1.35,r*1.0);
-  if(rebel&&resting){ // 摊开晒:小墨镜 + 冒热气
-    noStroke();fill(40,40,50);ellipse(-5,-1,7,6);ellipse(5,-1,7,6);
-    fill(255,240,190,120);ellipse(0,-r-6,5,9);ellipse(6,-r-9,4,7);}
-  else if(rebel){noStroke();fill(255,240,190,120);ellipse(0,-r-5,5,9);}
+  fill(120,150,180,60);ellipse(0,r*0.7,r*2,r*0.7);            // 影
+  fill(150,100,68);ellipse(0,r*0.4,r*2,r*0.9);               // 侧壁
+  fill(252,254,255);ellipse(0,0,r*2,r*1.5);                  // 白鼓面
+  stroke(180,150,110);strokeWeight(1.4);noFill();ellipse(0,0,r*1.4,r*1.0);
+  if(resting){ noStroke();
+    fill(40,40,50);ellipse(-5,-2,8,6);ellipse(5,-2,8,6);      // 小墨镜
+    fill(255,240,190,150);ellipse(-2,-r-6,5,10);ellipse(5,-r-10,4,8); } // 惬意热气
   pop();
 }
 </script>
