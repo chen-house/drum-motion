@@ -14,12 +14,12 @@
 // ============ 参数区(极简:只有底鼓 + 躺椅) ============
 const W=720,H=1280;
 const SNOWLINE=150;
-const CX=360, CY=720;         // 构图中心(主体居中偏上)
-// 3/4 帆布躺椅骨架(后高右、前低左)
-const SEAT_F={x:CX-186, y:CY+150};   // 座前沿
-const SEAT_H={x:CX+70,  y:CY+70};    // 座/靠背铰接
-const BACK_T={x:CX+186, y:CY-150};   // 靠背顶
-const BODY={x:CX-6, y:CY+30, r:150}; // 底鼓(躺着的身子)
+const CX=360, CY=600;         // 构图中心(主体居中偏上)
+// 3/4 帆布躺椅:一条连贯帆布(前低左 → 后高右)+ X 木架
+const SEAT_F={x:CX-210, y:CY+180};   // 帆布前沿(低,左)
+const BACK_T={x:CX+220, y:CY-170};   // 帆布后顶(高,右)
+const GLINE=CY+300;                  // 腿落地线
+const BODY={x:CX-4, y:CY+18, r:168}; // 底鼓(躺进帆布)
 // =====================================================
 let S=1,t0=0,snow=[],sparkle=[],drips=[];
 function setup(){const s=min(windowWidth/W,windowHeight/H);S=s;createCanvas(W*s,H*s);frameRate(60);reset();}
@@ -34,9 +34,9 @@ function breathe(t){return 1+0.035*sin(t*1.5);}
 function draw(){
   scale(S);const t=T(),dt=min(deltaTime/1000,0.05);
   drawSky(t);drawGround(t);
-  drawChairBack();      // 椅背在身后
-  drawBass(t,dt);       // 底鼓躺着
-  drawChairFront();     // 座+前腿压在身前
+  drawChairBehind();    // 后腿 + 整条帆布(在身后)
+  drawBass(t,dt);       // 底鼓躺进帆布
+  drawChairFront();     // 帆布前沿 + 前腿(压在身前=陷进去)
 }
 
 // ---------------- 天空 + 太阳 ----------------
@@ -65,36 +65,45 @@ function drawGround(t){
   noStroke();for(const f of snow){f.y+=(10+f.r*4)*deltaTime/1000;const x=f.x+sin(t*0.6+f.ph)*14;
     fill(255,255,255,180);circle(x,f.y,f.r*1.6);if(f.y>H+6){f.y=SNOWLINE-6;f.x=random(W);}}
   // 躺椅长投影
-  fill(150,172,204,80);push();translate(CX+30,CY+210);rotate(-0.26);ellipse(0,0,540,110);pop();
+  fill(150,172,204,80);push();translate(CX+20,GLINE+18);rotate(-0.24);ellipse(0,0,560,110);pop();
 }
-// ---------------- 帆布躺椅(3/4) ----------------
-function slats(ax,ay,bx,by,wid,n){
-  const dx=bx-ax,dy=by-ay,len=sqrt(dx*dx+dy*dy),nx=-dy/len,ny=dx/len;
-  for(let i=0;i<n;i++){const u=i/n,v=(i+1)/n;fill(i%2?[249,208,98]:[235,188,78]);
-    quad(ax+dx*u+nx*wid,ay+dy*u+ny*wid, ax+dx*v+nx*wid,ay+dy*v+ny*wid,
-         ax+dx*v-nx*wid,ay+dy*v-ny*wid, ax+dx*u-nx*wid,ay+dy*u-ny*wid);}
+// ---------------- 帆布躺椅(一整条帆布 + X 木架) ----------------
+// 帆布轴:SEAT_F(前低) → BACK_T(后高);法线方向 nx,ny
+function axis(){const dx=BACK_T.x-SEAT_F.x,dy=BACK_T.y-SEAT_F.y,len=sqrt(dx*dx+dy*dy);
+  return {dx,dy,len,ux:dx/len,uy:dy/len,nx:-dy/len,ny:dx/len};}
+function slatBand(u0,u1,wid){
+  const a=axis(),n=max(2,round((u1-u0)*10));
+  for(let i=0;i<n;i++){const u=u0+(u1-u0)*i/n,v=u0+(u1-u0)*(i+1)/n;
+    fill(i%2?[249,208,98]:[233,186,76]);
+    const ax=SEAT_F.x+a.dx*u,ay=SEAT_F.y+a.dy*u,bx=SEAT_F.x+a.dx*v,by=SEAT_F.y+a.dy*v;
+    quad(ax+a.nx*wid,ay+a.ny*wid, bx+a.nx*wid,by+a.ny*wid, bx-a.nx*wid,by-a.ny*wid, ax-a.nx*wid,ay-a.ny*wid);}
 }
-function drawChairBack(){
-  // 靠背斜框
-  stroke(196,148,84);strokeWeight(14);strokeCap(ROUND);noFill();
-  line(SEAT_H.x,SEAT_H.y, BACK_T.x,BACK_T.y);
-  line(SEAT_H.x-96,SEAT_H.y+18, BACK_T.x-96,BACK_T.y+18);
-  line(BACK_T.x,BACK_T.y, BACK_T.x-96,BACK_T.y+18);
-  // 靠背帆布
-  slats(SEAT_H.x-48,SEAT_H.y+9, BACK_T.x-48,BACK_T.y+9, 58, 6);
-  // 后腿(撑向右下)
-  stroke(174,130,72);strokeWeight(13);line(SEAT_H.x+2,SEAT_H.y+54, SEAT_H.x+150,CY+230);
+function drawChairBehind(){
+  const a=axis();
+  // 后腿(从帆布后段斜插地面,X 的一根)
+  stroke(174,130,72);strokeWeight(14);strokeCap(ROUND);
+  const hb={x:SEAT_F.x+a.dx*0.62,y:SEAT_F.y+a.dy*0.62};   // 铰接点
+  line(hb.x,hb.y, CX-70,GLINE);
+  // 帆布主体(整条,后半在身后)
+  fill(160,120,66);                 // 帆布下木边
+  const eb={x:BACK_T.x+a.ux*22,y:BACK_T.y+a.uy*22};
+  slatBand(0.0,1.0, 78);
+  // 后顶横木
+  stroke(196,148,84);strokeWeight(13);
+  line(BACK_T.x-a.nx*78,BACK_T.y-a.ny*78, BACK_T.x+a.nx*78,BACK_T.y+a.ny*78);
 }
 function drawChairFront(){
-  // 座面帆布(前沿→铰接)
-  slats(SEAT_F.x,SEAT_F.y, SEAT_H.x-10,SEAT_H.y+14, 54, 6);
+  const a=axis();
+  // 帆布前沿的一小段(压在底鼓身前,显出"陷进去")
+  slatBand(0.0,0.28, 78);
   // 前横木
   stroke(196,148,84);strokeWeight(13);strokeCap(ROUND);
-  line(SEAT_F.x-10,SEAT_F.y+8, SEAT_F.x+150,SEAT_F.y-40);
-  // 前腿(两根撑地)
-  stroke(174,130,72);strokeWeight(13);
-  line(SEAT_F.x+6,SEAT_F.y+2, SEAT_F.x-40,CY+232);
-  line(SEAT_F.x+150,SEAT_F.y-36, SEAT_F.x+186,CY+228);
+  line(SEAT_F.x-a.nx*82,SEAT_F.y-a.ny*82, SEAT_F.x+a.nx*82,SEAT_F.y+a.ny*82);
+  // 前腿(X 的另一根,从前沿斜插右下)
+  stroke(174,130,72);strokeWeight(14);
+  line(SEAT_F.x,SEAT_F.y, CX+90,GLINE);
+  // 一根短撑
+  line(SEAT_F.x+a.nx*70,SEAT_F.y+a.ny*70, CX-30,GLINE);
 }
 // ---------------- 底鼓(躺着晒太阳) ----------------
 function drawBass(t,dt){
@@ -120,7 +129,7 @@ function drawBass(t,dt){
   // 滴水 + 水洼
   drips=drips.filter(d=>{d.age+=dt;return d.age<1.1;});
   noStroke();for(const d of drips){fill(150,205,235,220*(1-d.age/1.1));ellipse(d.x,d.y+d.age*d.age*440,4,7);}
-  fill(150,205,235,110);ellipse(BODY.x-10,CY+186,BODY.r*1.3+10*sin(t),18);
+  fill(150,205,235,110);ellipse(BODY.x-10,GLINE-6,BODY.r*1.2+10*sin(t),18);
 }
 </script>
 </body>
