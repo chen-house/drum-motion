@@ -19,8 +19,8 @@
 // ================= 参数区 =================
 const W=720,H=1280;
 const BPM=122, BEAT=60/BPM, FIRST=1.12;
-// —— 各自上台(卡音频重音)——
-const E_STICKS=4.71, E_CYM=6.63, E_SNARE=8.55, E_BASS=9.59;
+// —— 各自上台(卡音频重音;大鼓第一版:音乐一响就滚出来)——
+const E_BASS=1.12, E_STICKS=4.71, E_CYM=6.63, T_SPIN=7.5, E_SNARE=8.55;
 // —— 节奏变化→集体舞→合成雪人——
 const T_GATHER=15.28;   // 大鼓滚向正中(强拍)
 const T_HEAD=16.85;     // 军鼓跳上头顶
@@ -217,26 +217,35 @@ function drawSnare(t){
   pop();
 }
 
-// ================= 镲片(帽子;小幅) =================
+// ================= 镲片(进场→立起转圈→帽子) =================
 function cymPos(t){
-  if(t<T_HAT){const k=seg(t,E_CYM,E_CYM+1.2);let x=lerp(W+140,560,k),y=GROUND-26-30*sin(k*PI);
-    let rot=-8,spin=(1-k)*8;                              // 进场小旋转(平躺)
-    if(t>E_CYM+1.2&&dancing(t)){rot=-8+A_CYMTILT*sin(beatN(t)*TWO_PI);y=GROUND-26-5*abs(sin(beatN(t)*PI));}
-    else if(t>E_CYM+1.2){rot=-8;y=GROUND-26;}
-    return {x,y,rot,spin};}
-  // 飞上头顶当帽,落得歪(-38°),等鼓棒扶正
-  const k=seg(t,T_HAT,T_HAT+0.9);
-  let rot=lerp(-8,-38,k);
-  if(t>=T_FIX){rot=lerp(-38,-12,seg(t,T_FIX+0.4,T_FIX+1.1));}   // 被扶正
-  return {x:lerp(560,CX+14,k),y:lerp(GROUND-26,HATY,k)-56*sin(k*PI),rot:rot,spin:(1-k)*6};
+  if(t<T_SPIN){const k=seg(t,E_CYM,E_CYM+0.7);              // 滑入
+    return {x:lerp(W+140,520,k),y:GROUND-26-30*sin(k*PI),rot:-8,upright:0,spin:0};}
+  if(t<T_SPIN+1.5){const k=seg(t,T_SPIN,T_SPIN+1.5);        // ★立起来转个圈(保留)
+    let up=ez(min(k*1.4,1)); if(k>0.78)up=1-ez((k-0.78)/0.22);
+    return {x:520,y:GROUND-70-46*up,rot:-8,upright:up,spin:k*TWO_PI*3};}
+  if(t<T_HAT){                                              // 平躺跳舞(小幅)
+    return {x:520,y:GROUND-26-5*abs(sin(beatN(t)*PI)),rot:-8+A_CYMTILT*sin(beatN(t)*TWO_PI),upright:0,spin:0};}
+  const k=seg(t,T_HAT,T_HAT+0.9);let rot=lerp(-8,-38,k);    // 飞上当帽,歪
+  if(t>=T_FIX)rot=lerp(-38,-12,seg(t,T_FIX+0.4,T_FIX+1.1)); // 被扶正
+  return {x:lerp(520,CX+14,k),y:lerp(GROUND-26,HATY,k)-56*sin(k*PI),rot,upright:0,spin:(1-k)*6};
 }
 function drawCymbal(t){
   if(t<E_CYM)return;
   const p=cymPos(t);let x=p.x,y=p.y,rot=p.rot;
   if(t>=T_HAT){const rk=bodyRock(t)+poseTurn(t);const dx=x-CX,dy=y-(GROUND+8);x=CX+dx*cos(rk)-dy*sin(rk);y=(GROUND+8)+dx*sin(rk)+dy*cos(rk);rot+=degrees(rk);}
-  push();translate(x,y);rotate(radians(rot)+(p.spin?sin(t*16)*0.08:0));
+  push();translate(x,y);rotate(radians(rot));
   noStroke();
-  fill(214,176,96);ellipse(0,0,120,34);fill(232,198,128);ellipse(0,-4,76,20);fill(248,222,150);ellipse(0,-7,26,10);
+  if(p.upright<0.25){
+    fill(214,176,96);ellipse(0,0,120,34);fill(232,198,128);ellipse(0,-4,76,20);fill(248,222,150);ellipse(0,-7,26,10);
+  }else{
+    push();rotate(p.spin);
+    const diam=lerp(34,120,p.upright), wf=abs(cos(p.spin))*p.upright+(1-p.upright);
+    fill(214,176,96);ellipse(0,0,120*wf,diam);
+    fill(232,198,128);ellipse(0,0,76*wf,diam*0.62);
+    fill(248,222,150);ellipse(0,0,max(6,26*wf),diam*0.2);
+    pop();
+  }
   pop();
 }
 
@@ -294,25 +303,23 @@ function drawCamera(t){
   fill(230,60,50,255*blink);circle(34,-16,7);
   pop();
 }
+// 拍立得=相框:一圈白边把真雪人框进去(闪光后长出来)
 function drawPolaroid(t){
-  if(t<T_POLA)return;
-  const rise=seg(t,T_POLA,T_POLA+1.4),x=CX,y=lerp(POS_CAM[1]-10,GROUND-260,rise),rot=radians(-6+8*rise);
-  push();translate(x,y);rotate(rot);scale(1+0.1*rise);
-  noStroke();fill(255);rect(-92,-112,184,224,6);fill(248,248,244);rect(-92,72,184,40);
-  const dev=seg(t,T_POLA+0.3,T_POLA+1.4);
-  push();translate(0,-16);
-  fill(lerpColor(color(40,50,70),color(120,200,225),dev));rect(-80,-88,160,120);
-  fill(lerpColor(color(30,40,60),color(240,224,170),dev));rect(-80,20,160,12);
-  // 迷你雪人(身/头/帽/臂)
-  fill(lerpColor(color(20,26,40),color(246,248,250),dev));circle(0,6,58);          // 身
-  fill(lerpColor(color(20,26,40),color(150,100,66),dev));rect(-20,-30,40,22,4);     // 头
-  fill(lerpColor(color(20,26,40),color(226,196,128),dev));ellipse(0,-36,46,12);     // 帽
-  stroke(lerpColor(color(20,26,40),color(214,170,120),dev));strokeWeight(5);
-  line(-26,0,-40,16);line(26,0,40,16);noStroke();                                   // 臂
-  fill(lerpColor(color(30,40,60),color(255,246,196),dev));circle(52,-64,24);        // 小太阳
-  pop();
-  if(dev>0.7){fill(90,90,110,255*dev);textAlign(CENTER);textStyle(BOLD);textSize(17);text('summer ♪',0,98);}
-  pop();
+  if(t<T_FLASH)return;
+  const a=seg(t,T_FLASH+0.05,T_FLASH+0.7);        // 白边随闪光长出
+  // 取景窗(把雪人+手臂框进去)
+  const wx0=196,wy0=662,wx1=524,wy1=1016;
+  const bd=30*a, bb=90*a;                          // 边宽 / 底边(放标题)
+  noStroke();fill(255,255,255,250);
+  rect(wx0-bd,wy0-bd,(wx1-wx0)+2*bd,bd,4);         // 上
+  rect(wx0-bd,wy1,(wx1-wx0)+2*bd,bb,4);            // 下(厚)
+  rect(wx0-bd,wy0-bd,bd,(wy1-wy0)+2*bd);           // 左
+  rect(wx1,wy0-bd,bd,(wy1-wy0)+2*bd);              // 右
+  // 轻微内影,像照片
+  if(a>0.5){noFill();stroke(0,0,0,25);strokeWeight(3);rect(wx0,wy0,wx1-wx0,wy1-wy0);}
+  // 标题
+  if(a>0.85){noStroke();fill(96,96,116);textAlign(CENTER);textStyle(BOLD);textSize(30);
+    text('summer ♪',(wx0+wx1)/2,wy1+bb*0.66);}
 }
 </script>
 </body>
