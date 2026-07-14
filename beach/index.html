@@ -16,7 +16,6 @@
 </style>
 </head>
 <body>
-<audio id="song" src="colombiaMiEncanto.mp3" loop preload="auto"></audio>
 <div id="ov"><div class="play">▶</div><p>点击开始 · tap to play</p></div>
 <script>
 // ================= 参数区 =================
@@ -36,21 +35,41 @@ const SEA=560;             // 海平线
 const CX=360, BR=104;      // 雪人中心 / 底鼓半径
 const HEADY=GROUND-BR*2-24, HATY=HEADY-30-24;
 // ==========================================
-let S=1, audioEl, started=false, seekParam=null;
+let S=1, started=false, seekParam=null;
 let grain=[],seaSpark=[],clouds=[],birds=[];
 
 function getParam(k){const m=new RegExp('[?&]'+k+'=([^&]+)').exec(location.search);return m?decodeURIComponent(m[1]):null;}
 
+// ===== Web Audio 引擎(<audio>标签在本环境不可靠,改用 AudioContext 采样级同步) =====
+let actx=null, abuf=null, srcNode=null, startAt=0, gainNode=null, wantStart=false, pendingMuted=false, SONGDUR=24.57;
+function initAudio(){
+  try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){return;}
+  gainNode=actx.createGain(); gainNode.connect(actx.destination);
+  fetch('colombiaMiEncanto.mp3').then(r=>r.arrayBuffer()).then(b=>actx.decodeAudioData(b))
+    .then(x=>{abuf=x;SONGDUR=x.duration;if(wantStart)_go();}).catch(e=>{});
+}
+function _go(){
+  if(!abuf||!actx)return;
+  srcNode=actx.createBufferSource();srcNode.buffer=abuf;srcNode.loop=true;
+  srcNode.connect(gainNode);gainNode.gain.value=pendingMuted?0:1;
+  startAt=actx.currentTime;srcNode.start(0);started=true;
+}
+function startPlay(muted){
+  pendingMuted=!!muted;
+  if(actx&&actx.state==='suspended')actx.resume();
+  if(abuf)_go(); else wantStart=true;
+}
+
 function setup(){
   const s=min(windowWidth/W,windowHeight/H);S=s;
   createCanvas(W*s,H*s);frameRate(60);
-  audioEl=document.getElementById('song');
   seekParam=getParam('seek'); if(seekParam!==null)seekParam=parseFloat(seekParam);
   const auto=getParam('auto');
   const ov=document.getElementById('ov');
-  if(seekParam!==null){ov.style.display='none';started=true;}      // 调试:静帧
-  else if(auto){audioEl.muted=true;audioEl.play();started=true;ov.style.display='none';} // 调试:静音自动播放
-  else{ov.addEventListener('click',()=>{audioEl.currentTime=0;audioEl.play();started=true;ov.style.display='none';});}
+  initAudio();                                                    // 预解码
+  if(seekParam!==null){ov.style.display='none';started=true;}     // 调试:静帧
+  else if(auto){startPlay(true);ov.style.display='none';}         // 调试:静音自动播放
+  else{ov.addEventListener('click',()=>{startPlay(false);ov.style.display='none';});}
   randomSeed(7);
   for(let i=0;i<340;i++)grain.push({x:random(W),y:random(GROUND+2,H),a:random(30,80),d:random()<0.5});
   for(let i=0;i<50;i++)seaSpark.push({x:random(W),y:random(SEA+8,GROUND-8),ph:random(TWO_PI),sp:random(0.6,1.6)});
@@ -58,12 +77,12 @@ function setup(){
   for(let i=0;i<4;i++)birds.push({x:random(W),y:random(150,340),ph:random(TWO_PI),v:random(8,16)});
 }
 function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
-function mousePressed(){ if(seekParam!==null||!started) return; audioEl.currentTime=0; audioEl.play(); } // 重播
+function mousePressed(){ if(seekParam!==null||!started) return; if(srcNode){try{srcNode.stop();}catch(e){}} _go(); } // 重播
 function ez(x){x=constrain(x,0,1);return x*x*(3-2*x);}
 function seg(t,a,b){return ez((t-a)/(b-a));}
 function hop(u,h){return -4*h*u*(1-u);}
 // 主时钟:音频 currentTime(或调试 seek)
-function masterT(){ if(seekParam!==null)return seekParam; return (started&&audioEl)?audioEl.currentTime:0; }
+function masterT(){ if(seekParam!==null)return seekParam; return (started&&actx)?((actx.currentTime-startAt)%SONGDUR):0; }
 // 节拍:每拍一个 0..1(0=刚落拍),beatHit=落拍时=1 衰减
 function beatNum(t){return (t-FIRST)/BEAT;}
 function beatHit(t,sub){ sub=sub||1; let ph=((beatNum(t)*sub)%1+1)%1; return exp(-5*ph);}
