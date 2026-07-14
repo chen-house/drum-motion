@@ -200,8 +200,11 @@ function cymPos(t){
     let up=1;if(k>0.72)up=1-ez((k-0.72)/0.28);
     return {x:520,y:GROUND-70*up-26*(1-up),rot:-8,upright:up,spin:(t-E_CYM)*TWO_PI*2.4};}
   if(t<T_HAT){return {x:520,y:GROUND-26-5*abs(sin(beatN(t)*PI)),rot:-8+A_CYMTILT*sin(beatN(t)*TWO_PI),upright:0,spin:0};}
-  const k=seg(t,T_HAT,T_HAT+0.9);let rot=lerp(-8,-38,k);if(t>=T_FIX)rot=lerp(-38,-12,seg(t,T_FIX+0.4,T_FIX+1.0));
-  return {x:lerp(520,CX+14,k),y:lerp(GROUND-26,HATY,k)-56*sin(k*PI),rot,upright:0,spin:(1-k)*6};
+  const k=seg(t,T_HAT,T_HAT+0.9);let rot=lerp(-8,-46,k);            // 落得很歪(一眼看出没戴正)
+  if(t>=T_FIX+0.25)rot=lerp(-46,-6,seg(t,T_FIX+0.25,T_FIX+0.85));    // 鼓棒一顶就正
+  // 歪的时候整顶帽子还往左偏一点,像随手扣歪了
+  const off=(t<T_FIX+0.25)?14:lerp(14,0,seg(t,T_FIX+0.25,T_FIX+0.85));
+  return {x:lerp(520,CX+14,k)-(t>=T_HAT+0.9?off:0),y:lerp(GROUND-26,HATY,k)-56*sin(k*PI),rot,upright:0,spin:(1-k)*6};
 }
 function drawCymbal(t){
   if(t<E_CYM)return;const p=cymPos(t);let x=p.x,y=p.y,rot=p.rot;
@@ -243,9 +246,9 @@ function drawStickB(t){
   else if(t<T_INSPECT){if(inDance(t)){const g=gm(t);const bp=((beatN(t)+0.5)%1+1)%1;x=205+g.dx*0.9;y=GROUND+6+g.dy+hop(bp,A_HOP);rot=degrees(g.spin)-A_TWIST*beatSway(t);}else{x=205;y=GROUND+6;tilt=4*sin(t*1.3);}}
   else if(t<T_CLIMB){const k=seg(t,T_INSPECT,T_INSPECT+0.6);x=lerp(205,150,k);y=GROUND+6+hop((k)%1,14); // 退后
     if(t>T_INSPECT+0.6)tilt=12*sin((t-T_INSPECT-0.6)*2.4);}                                                // 歪头审视(hold~1s)
-  else if(t<T_FIX){const k=seg(t,T_CLIMB,T_CLIMB+1.0);x=lerp(150,CX-70,k);y=lerp(GROUND+6,HATY+64,k)+hop(k,46);} // 走过去爬上
-  else if(t<T_DOWN){x=CX-70;y=HATY+64;const pk=seg(t,T_FIX,T_FIX+0.7);tilt=-14*sin(pk*PI); if(t>T_FIX+0.7)tilt=-3*sin((t-T_FIX-0.7)*3);} // 扶正+扶稳(hold)
-  else if(t<T_NOD){const k=seg(t,T_DOWN,T_NOD);x=lerp(CX-70,182,k);y=lerp(HATY+64,GROUND+6,k)+hop(k,54);}    // 跳下
+  else if(t<T_FIX){const k=seg(t,T_CLIMB,T_CLIMB+1.0);x=lerp(150,CX-58,k);y=lerp(GROUND+6,HATY+76,k)+hop(k,46);tilt=lerp(0,13,k);} // 爬到帽子边(头够到镲片)
+  else if(t<T_DOWN){x=CX-58;y=HATY+76;const pk=seg(t,T_FIX,T_FIX+0.6);tilt=13+9*sin(pk*PI);if(t>T_FIX+0.6)tilt=13;} // 顶住镲片把它扶正(接触)
+  else if(t<T_NOD){const k=seg(t,T_DOWN,T_NOD);x=lerp(CX-58,182,k);y=lerp(HATY+76,GROUND+6,k)+hop(k,54);}    // 跳下
   else if(t<T_ARM){x=182;y=GROUND+6;tilt=8*sin((t-T_NOD)*7);}                                                 // 满意点头
   else{const k=seg(t,T_ARM,T_ARM+0.7);x=lerp(182,CX+92,k);y=lerp(GROUND+6,GROUND-BR-24,k)+hop(k,54);rot=lerp(0,-56,k);} // 归位右臂
   const rock=(t>=T_ARM+0.7)?(bodyRock(t)+poseTurn(t)):0;
