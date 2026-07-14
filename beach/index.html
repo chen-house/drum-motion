@@ -3,201 +3,199 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>海滩雪人 · Vallenato</title>
+<title>海滩乐队 · Vallenato</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <style>
   html,body{margin:0;padding:0;background:#0a1128;height:100%;overflow:hidden}
   canvas{display:block;margin:0 auto}
-  #ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-      background:rgba(6,20,34,.55);color:#fff;font-family:-apple-system,system-ui,sans-serif;z-index:9;cursor:pointer}
-  #ov .play{width:96px;height:96px;border-radius:50%;background:#ffd36a;color:#1a2b4a;
-      display:flex;align-items:center;justify-content:center;font-size:44px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
-  #ov p{margin-top:18px;font-size:17px;letter-spacing:2px;opacity:.92}
+  #hint{position:fixed;left:50%;bottom:5%;transform:translateX(-50%);z-index:9;
+    color:#fff;font-family:-apple-system,system-ui,sans-serif;font-size:15px;letter-spacing:1px;
+    background:rgba(20,40,60,.5);padding:8px 16px;border-radius:20px;pointer-events:none;
+    transition:opacity .4s}
 </style>
 </head>
 <body>
-<div id="ov"><div class="play">▶</div><p>点击开始 · tap to play</p></div>
+<div id="hint">🔊 点一下 · 带声音从头播</div>
 <script>
-// ================= 参数区 =================
+// ================= 参数区(卡点已对齐音频重音) =================
 const W=720,H=1280;
-const BPM=122, BEAT=60/BPM, FIRST=1.12;   // 音频节拍网格
-// 出场/编排时刻(秒,对齐音频)
-const E_BASS=1.12, E_SNARE=3.09, E_STICKS=5.05, E_CYM=7.02;
-const T_BREAK=8.99;        // 间奏定格
-const T_RESUME=10.96;      // 恢复
-const T_GATHER=11.5;       // 底鼓归中
-const T_HEAD=12.92;        // 军鼓跳上头
-const T_HAT=14.89;         // 镲片当帽
-const T_ARMS=16.85;        // 鼓棒插成手臂
-const T_SHADES=18.4;       // 戴墨镜 + 派对
-const GROUND=1010;         // 沙滩线
-const SEA=560;             // 海平线
-const CX=360, BR=104;      // 雪人中心 / 底鼓半径
-const HEADY=GROUND-BR*2-24, HATY=HEADY-30-24;
-// ==========================================
-let S=1, started=false, seekParam=null;
+const BPM=122, BEAT=60/BPM, FIRST=1.12;
+const E_STICKS=4.71;   // 鼓棒走两步进
+const E_CYM=6.63;      // 镲片进场
+const T_SPIN=7.3;      // 镲片立起转圈
+const E_SNARE=8.55;    // 军鼓蹦入
+const E_BASS=9.59;     // 大鼓踩强拍滚进(★)
+const T_ARRANGE=17.4;  // 小鼓棒当摄影师调位
+const T_LINEUP=20.4;   // 各就各位
+const T_POSE=21.4;     // 集体侧身 + 太阳云凑热闹
+const T_FLASH=22.75;   // 闪光 + 咔嚓
+const T_POLA=23.05;    // 拍立得弹出
+const SONGDUR=24.57;
+const GROUND=1010, SEA=560, CX=360, BR=104;
+// 合影站位(沙滩基线)
+const POS={bass:[CX,GROUND-BR+6], snare:[210,GROUND-30], cym:[520,GROUND-70],
+           stkA:[300,GROUND+6], stkB:[430,GROUND+6], cam:[360,GROUND+150]};
+// ============================================================
+let S=1, seekParam=null, wallStart=0, audioStarted=false;
 let grain=[],seaSpark=[],clouds=[],birds=[];
-
+// --- Web Audio ---
+let actx=null,abuf=null,srcNode=null,startAt=0,gainNode=null,wantOffset=null;
 function getParam(k){const m=new RegExp('[?&]'+k+'=([^&]+)').exec(location.search);return m?decodeURIComponent(m[1]):null;}
-
-// ===== Web Audio 引擎(<audio>标签在本环境不可靠,改用 AudioContext 采样级同步) =====
-let actx=null, abuf=null, srcNode=null, startAt=0, gainNode=null, wantStart=false, pendingMuted=false, SONGDUR=24.57;
 function initAudio(){
-  try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){return;}
-  gainNode=actx.createGain(); gainNode.connect(actx.destination);
+  try{actx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
+  gainNode=actx.createGain();gainNode.connect(actx.destination);
   fetch('colombiaMiEncanto.mp3').then(r=>r.arrayBuffer()).then(b=>actx.decodeAudioData(b))
-    .then(x=>{abuf=x;SONGDUR=x.duration;if(wantStart)_go();}).catch(e=>{});
+    .then(x=>{abuf=x;if(wantOffset!==null){const o=wantOffset;wantOffset=null;_go(o);}}).catch(e=>{});
 }
-function _go(){
+function _go(offset){
   if(!abuf||!actx)return;
-  srcNode=actx.createBufferSource();srcNode.buffer=abuf;srcNode.loop=true;
-  srcNode.connect(gainNode);gainNode.gain.value=pendingMuted?0:1;
-  startAt=actx.currentTime;srcNode.start(0);started=true;
+  if(srcNode){try{srcNode.stop();}catch(e){}}
+  srcNode=actx.createBufferSource();srcNode.buffer=abuf;srcNode.loop=false;
+  srcNode.connect(gainNode);gainNode.gain.value=1;
+  startAt=actx.currentTime-offset;srcNode.start(0,Math.max(0,offset));
+  audioStarted=true;
+  scheduleShutter();
 }
-function startPlay(muted){
-  pendingMuted=!!muted;
+function startTake(){                 // 用户点击:从头带声跑一遍
+  wallStart=performance.now()/1000;
   if(actx&&actx.state==='suspended')actx.resume();
-  if(abuf)_go(); else wantStart=true;
+  if(abuf)_go(0); else wantOffset=0;
+  const h=document.getElementById('hint');if(h)h.style.opacity='0';
+}
+function scheduleShutter(){
+  if(!actx||!audioStarted)return;
+  const when=startAt+T_FLASH;
+  // 两声机械 click(反光板上/下)
+  [0,0.055].forEach((off,idx)=>{
+    const dur=idx?0.03:0.05, N=Math.floor(actx.sampleRate*dur);
+    const b=actx.createBuffer(1,N,actx.sampleRate),d=b.getChannelData(0);
+    for(let i=0;i<N;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/N,idx?4:3);
+    const s=actx.createBufferSource();s.buffer=b;
+    const bp=actx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=idx?5200:3400;bp.Q.value=0.7;
+    const g=actx.createGain();g.gain.value=idx?0.6:0.9;
+    s.connect(bp).connect(g).connect(actx.destination);s.start(when+off);
+  });
+}
+function masterT(){
+  if(seekParam!==null)return seekParam;
+  if(audioStarted&&actx)return Math.min(actx.currentTime-startAt,SONGDUR); // 带声:一次到底定格
+  return ((performance.now()/1000-wallStart)%SONGDUR);                     // 预览:静音循环
 }
 
 function setup(){
   const s=min(windowWidth/W,windowHeight/H);S=s;
   createCanvas(W*s,H*s);frameRate(60);
-  seekParam=getParam('seek'); if(seekParam!==null)seekParam=parseFloat(seekParam);
-  const auto=getParam('auto');
-  const ov=document.getElementById('ov');
-  initAudio();                                                    // 预解码
-  if(seekParam!==null){ov.style.display='none';started=true;}     // 调试:静帧
-  else if(auto){startPlay(true);ov.style.display='none';}         // 调试:静音自动播放
-  else{ov.addEventListener('click',()=>{startPlay(false);ov.style.display='none';});}
+  seekParam=getParam('seek');if(seekParam!==null)seekParam=parseFloat(seekParam);
+  wallStart=performance.now()/1000;
+  if(seekParam===null)initAudio();
   randomSeed(7);
   for(let i=0;i<340;i++)grain.push({x:random(W),y:random(GROUND+2,H),a:random(30,80),d:random()<0.5});
   for(let i=0;i<50;i++)seaSpark.push({x:random(W),y:random(SEA+8,GROUND-8),ph:random(TWO_PI),sp:random(0.6,1.6)});
-  for(let i=0;i<3;i++)clouds.push({x:random(W),y:random(120,300),s:random(0.7,1.2),v:random(6,12)});
+  for(let i=0;i<3;i++)clouds.push({x:random(W),y:random(120,300),s:random(0.7,1.2),v:random(6,12),bx:0});
   for(let i=0;i<4;i++)birds.push({x:random(W),y:random(150,340),ph:random(TWO_PI),v:random(8,16)});
 }
 function windowResized(){const s=min(windowWidth/W,windowHeight/H);S=s;resizeCanvas(W*s,H*s);}
-function mousePressed(){ if(seekParam!==null||!started) return; if(srcNode){try{srcNode.stop();}catch(e){}} _go(); } // 重播
+function mousePressed(){ if(seekParam!==null)return; startTake(); }
 function ez(x){x=constrain(x,0,1);return x*x*(3-2*x);}
 function seg(t,a,b){return ez((t-a)/(b-a));}
 function hop(u,h){return -4*h*u*(1-u);}
-// 主时钟:音频 currentTime(或调试 seek)
-function masterT(){ if(seekParam!==null)return seekParam; return (started&&actx)?((actx.currentTime-startAt)%SONGDUR):0; }
-// 节拍:每拍一个 0..1(0=刚落拍),beatHit=落拍时=1 衰减
-function beatNum(t){return (t-FIRST)/BEAT;}
-function beatHit(t,sub){ sub=sub||1; let ph=((beatNum(t)*sub)%1+1)%1; return exp(-5*ph);}
-function beatSway(t,perbar){ return sin((beatNum(t)/4)*TWO_PI*(perbar||1)); } // 每小节摆
-// 是否在"跳舞窗口"(满格 / 派对)
-function dancing(t){ return (t>=FIRST&&t<T_BREAK)||(t>=T_RESUME&&t<T_GATHER)||(t>=T_SHADES); }
+function beatN(t){return (t-FIRST)/BEAT;}
+function beatHit(t,sub){sub=sub||1;let ph=((beatN(t)*sub)%1+1)%1;return exp(-5*ph);}
+function beatSway(t){return sin((beatN(t)/4)*TWO_PI);}
 
 // ================== 主循环 ==================
 function draw(){
   scale(S);
   const t=masterT();
-  drawSky(t); drawSea(t); drawSun(t); drawPalms(t); drawSand(t);
-  // 角色(堆好后从下往上:身→头→帽→臂)
-  drawBass(t); drawSnare(t); drawCymbal(t); drawStickA(t); drawStickB(t);
-  // 派对亮片
-  if(t>=T_SHADES){partySparkle(t);}
-  // 结束提示(仅调试)
+  const crowd=(t>=T_POSE&&t<T_POLA+1.2)?seg(t,T_POSE,T_FLASH):0;  // 太阳云凑热闹
+  drawSky(t,crowd); drawSea(t); drawSun(t,crowd); drawPalms(t); drawSand(t);
+  // 角色
+  drawCymbal(t); drawSnare(t); drawBass(t); drawStickA(t); drawStickB(t);
+  // 相机 + 闪光 + 拍立得
+  drawCamera(t);
+  if(t>=T_FLASH&&t<T_FLASH+0.28){const f=1-(t-T_FLASH)/0.28;noStroke();fill(255,255,255,235*f);rect(0,0,W,H);}
+  drawPolaroid(t);
 }
 
 // ================= 加勒比背景 =================
-function drawSky(t){
+function drawSky(t,crowd){
   for(let y=0;y<SEA;y+=5){const k=y/SEA;
     stroke(lerpColor(color(78,201,232),color(255,231,176),k));strokeWeight(5);line(0,y,W,y);}
-  // 云
   noStroke();
   for(const c of clouds){c.x=(c.x+c.v*deltaTime/1000);if(c.x>W+160)c.x=-160;
+    const cx=c.x + crowd*((CX-c.x)*0.45);                 // 凑热闹:向中间靠
+    const cy=c.y + crowd*60;
     fill(255,255,255,180);
-    ellipse(c.x,c.y,150*c.s,54*c.s);ellipse(c.x+58*c.s,c.y-16*c.s,120*c.s,46*c.s);
-    ellipse(c.x-58*c.s,c.y-8*c.s,110*c.s,42*c.s);ellipse(c.x+16*c.s,c.y+14*c.s,150*c.s,40*c.s);}
-  // 鸟(远处 V)
+    ellipse(cx,cy,150*c.s,54*c.s);ellipse(cx+58*c.s,cy-16*c.s,120*c.s,46*c.s);
+    ellipse(cx-58*c.s,cy-8*c.s,110*c.s,42*c.s);ellipse(cx+16*c.s,cy+14*c.s,150*c.s,40*c.s);}
   stroke(70,90,110,150);strokeWeight(2);noFill();
   for(const b of birds){b.x=(b.x+b.v*deltaTime/1000);if(b.x>W+40)b.x=-40;
-    const yy=b.y+sin(t*2+b.ph)*4;
-    line(b.x-7,yy,b.x,yy-4);line(b.x,yy-4,b.x+7,yy);}
+    const yy=b.y+sin(t*2+b.ph)*4;line(b.x-7,yy,b.x,yy-4);line(b.x,yy-4,b.x+7,yy);}
 }
-function drawSun(t){
-  const sy=180+8*sin(t*0.6);
+function drawSun(t,crowd){
+  const sx=lerp(560,CX+120,crowd), sy=lerp(180,320,crowd)+8*sin(t*0.6);
+  const sc=1+crowd*0.25;
   noStroke();
-  fill(255,236,150,60);circle(560,sy,220);
-  fill(255,240,170,90);circle(560,sy,150);
-  fill(255,246,196);circle(560,sy,104);
+  fill(255,236,150,60);circle(sx,sy,220*sc);
+  fill(255,240,170,90);circle(sx,sy,150*sc);
+  fill(255,246,196);circle(sx,sy,104*sc);
+  if(crowd>0.5){ // 太阳的小笑脸(凑热闹)
+    fill(230,180,90);ellipse(sx-24*sc,sy-6*sc,7,7);ellipse(sx+24*sc,sy-6*sc,7,7);
+    noFill();stroke(230,180,90);strokeWeight(3);arc(sx,sy+10*sc,40*sc,26*sc,0.2,PI-0.2);}
 }
 function drawSea(t){
   for(let y=SEA;y<GROUND;y+=5){const k=(y-SEA)/(GROUND-SEA);
     stroke(lerpColor(color(56,170,196),color(30,120,150),k));strokeWeight(5);line(0,y,W,y);}
-  // 波光横纹(漂动)
   stroke(210,245,250,90);strokeWeight(2);
-  for(let i=0;i<10;i++){const yy=SEA+16+i*((GROUND-SEA-20)/10);
-    const ph=t*(20+i*4);
+  for(let i=0;i<10;i++){const yy=SEA+16+i*((GROUND-SEA-20)/10);const ph=t*(20+i*4);
     for(let x=-40;x<W;x+=90){const xx=(x+ph)%(W+80)-40;line(xx,yy,xx+42,yy);}}
-  // 太阳在海面的倒影
   noStroke();
-  for(let i=0;i<6;i++){const yy=SEA+20+i*26;const wob=sin(t*1.6+i)*14;
-    fill(255,244,190,70);ellipse(560+wob,yy,60-i*4,6);}
-  // 闪点
-  for(const s of seaSpark){const a=0.3+0.7*abs(sin(t*2*s.sp+s.ph));
-    fill(255,255,255,150*a);circle(s.x,s.y,2.2);}
+  for(const s of seaSpark){const a=0.3+0.7*abs(sin(t*2*s.sp+s.ph));fill(255,255,255,150*a);circle(s.x,s.y,2.2);}
 }
-function drawPalms(t){
-  drawPalm(70,GROUND+6,1.0,t,0);
-  drawPalm(660,GROUND+10,-1.05,t,1.3);
-}
+function drawPalms(t){drawPalm(70,GROUND+6,1.0,t,0);drawPalm(660,GROUND+10,-1.05,t,1.3);}
 function drawPalm(x,base,dir,t,ph){
-  push();translate(x,base);
-  const sway=radians(4*sin(t*0.9+ph));
-  // 树干
-  noFill();stroke(120,86,52);strokeWeight(15);
-  const topx=dir*40, topy=-330;
-  const cx1=dir*6, cy1=-150, cx2=dir*26, cy2=-260;
+  push();translate(x,base);const sway=radians(4*sin(t*0.9+ph));
+  const topx=dir*40,topy=-330,cx1=dir*6,cy1=-150,cx2=dir*26,cy2=-260;
   push();rotate(sway);
-  beginShape();vertex(0,0);bezierVertex(cx1,cy1,cx2,cy2,topx,topy);endShape();
-  stroke(150,110,70);strokeWeight(6);
-  beginShape();vertex(0,0);bezierVertex(cx1,cy1,cx2,cy2,topx,topy);endShape();
-  // 叶
-  translate(topx,topy);
-  fill(38,120,70);noStroke();
+  noFill();stroke(120,86,52);strokeWeight(15);beginShape();vertex(0,0);bezierVertex(cx1,cy1,cx2,cy2,topx,topy);endShape();
+  stroke(150,110,70);strokeWeight(6);beginShape();vertex(0,0);bezierVertex(cx1,cy1,cx2,cy2,topx,topy);endShape();
+  translate(topx,topy);fill(38,120,70);noStroke();
   for(let k=0;k<7;k++){const a=radians(-150+k*42)+sway*0.5;
-    push();rotate(a);
-    beginShape();vertex(0,0);quadraticVertex(70,-16,140,6);quadraticVertex(70,10,0,6);endShape(CLOSE);
-    pop();}
-  fill(60,150,90);circle(0,0,16);
-  // 椰子
-  fill(96,64,40);circle(dir*-8,10,13);circle(dir*8,14,12);
+    push();rotate(a);beginShape();vertex(0,0);quadraticVertex(70,-16,140,6);quadraticVertex(70,10,0,6);endShape(CLOSE);pop();}
+  fill(60,150,90);circle(0,0,16);fill(96,64,40);circle(dir*-8,10,13);circle(dir*8,14,12);
   pop();pop();
 }
 function drawSand(t){
-  noStroke();
-  fill(240,220,168);rect(0,GROUND,W,H-GROUND);
+  noStroke();fill(240,220,168);rect(0,GROUND,W,H-GROUND);
   fill(248,232,186);ellipse(200,GROUND+20,520,60);ellipse(560,GROUND+30,520,70);
-  // 湿沙(靠海更深)
   fill(214,192,150,150);rect(0,GROUND,W,26);
-  // 颗粒
   for(const g of grain){fill(g.d?196:255,g.d?170:250,g.d?120:220,g.a);rect(g.x,g.y,2.2,2.2);}
-  // 几个贝壳
   fill(255,214,200);ellipse(150,GROUND+120,26,20);
   fill(210,235,240);ellipse(600,GROUND+150,24,18);
-  fill(255,230,180);ellipse(420,GROUND+180,22,16);
 }
 
-// ================= 底鼓(身子/白=雪) =================
+// ============ 位置:从入场/跳舞 → 合影站位 ============
+function toLineup(t,fromX,fromY,key){
+  const [lx,ly]=POS[key];
+  const k=seg(t,T_ARRANGE,T_LINEUP);
+  return [lerp(fromX,lx,k),lerp(fromY,ly,k)];
+}
+function poseTurn(t){ return (t>=T_POSE)?radians(-12*seg(t,T_POSE,T_POSE+0.5)):0; } // 集体侧身
+
+// ================= 底鼓(★9.59强拍滚进) =================
 let bassTheta=0;
 function drawBass(t){
   if(t<E_BASS)return;
-  let x,rolling=false;
-  if(t<E_BASS+1.6){const k=seg(t,E_BASS,E_BASS+1.6);x=lerp(-150,270,k);rolling=true;}       // 滚入
-  else if(t<T_GATHER)x=270;
-  else{const k=seg(t,T_GATHER,T_GATHER+1.0);x=lerp(270,CX,k);rolling=k<1;}
-  if(rolling)bassTheta+=deltaTime/1000*3.6;
-  const y=GROUND-BR+6;
-  // 舞蹈:落拍撼动 + 每小节左右摆
-  let dRot=0,dx=0;
-  if(dancing(t)){dRot=radians(9*beatSway(t))+radians(4*beatHit(t))*0;dx=10*beatSway(t,1);}
-  const rock=(t>=T_SHADES)?radians(4.5*sin((t-T_SHADES)*1.7)):0;   // 不倒翁
-  const sq=1+0.05*beatHit(t)+0.02*(t>=T_SHADES?1:0);
-  push();translate(x+dx,y);rotate(dRot+rock);scale(sq,1/sq);
+  let x,y=GROUND-BR+6,rolling=false;
+  if(t<E_BASS+1.5){const k=seg(t,E_BASS,E_BASS+1.5);x=lerp(-160,CX,k);rolling=true;}   // 猛地滚进正中
+  else if(t<T_ARRANGE)x=CX;
+  else{[x,y]=toLineup(t,CX,GROUND-BR+6,'bass');rolling=false;}
+  if(rolling)bassTheta+=deltaTime/1000*4.2;
+  const dance=(t>=E_BASS+1.5&&t<T_ARRANGE);
+  const dRot=dance?radians(9*beatSway(t)):0;
+  const turn=poseTurn(t);
+  const sq=1+0.05*beatHit(t)*(dance?1:0);
+  push();translate(x,y);rotate(dRot+turn);scale(sq,1/sq);
   push();rotate(bassTheta);
   noStroke();
   fill(232,236,244);circle(0,0,BR*2.06);
@@ -205,129 +203,162 @@ function drawBass(t){
   fill(244,246,250);circle(0,0,BR*1.72);
   fill(206,214,226);for(let k=0;k<8;k++){const a=k*TWO_PI/8+0.4;circle(cos(a)*BR*0.93,sin(a)*BR*0.93,9);}
   pop();
-  if(t>T_HEAD+0.2){ // 堆好后:身上煤扣 + 心口暖光
-    const w=seg(t,T_HEAD,T_HEAD+0.6);
-    fill(52,54,64,220*w);circle(0,BR*0.30,8);circle(0,BR*0.55,7);
-    if(t>=T_SHADES){const pl=beatHit(t);fill(255,150,90,120*pl);circle(0,-BR*0.1,44+30*pl);}
-  }
+  // 合影时的墨镜小脸(可爱)
+  if(t>=T_LINEUP-0.3){const w=seg(t,T_LINEUP-0.3,T_LINEUP+0.3);
+    fill(30,34,44,255*w);rect(-34,-14,26,16,4);rect(8,-14,26,16,4);rect(-8,-9,16,4);
+    fill(120,200,230,150*w);rect(-31,-11,9,6,2);rect(11,-11,9,6,2);
+    fill(238,150,120,120*w);ellipse(-40,10,15,9);ellipse(40,10,15,9);}
   pop();
 }
 
-// ================= 军鼓(脑袋) =================
-function snarePos(t){
-  if(t<T_HEAD){const k=seg(t,E_SNARE,E_SNARE+1.4);          // 蹦入
-    let x=lerp(W+120,470,k),y=GROUND-32+hop((k*5)%1,50);
-    if(t>E_SNARE+1.4&&t<T_BREAK){y=GROUND-32-14*beatHit(t);x=470+10*beatSway(t,1);}  // 原地弹跳
-    return {x,y};}
-  const k=seg(t,T_HEAD,T_HEAD+1.0);                         // 跳上头顶
-  return {x:lerp(470,CX,k),y:lerp(GROUND-32,HEADY,k)+hop(k,110)};
-}
+// ================= 军鼓(8.55蹦入) =================
 function drawSnare(t){
   if(t<E_SNARE)return;
-  const p=snarePos(t),w=104,h=58;
-  const alive=t>=T_SHADES;
-  const rock=(t>=T_SHADES)?radians(4.5*sin((t-T_SHADES)*1.7)):0;
-  let rp=p;
-  if(t>=T_SHADES){const dx=p.x-CX,dy=p.y-(GROUND+8);rp={x:CX+dx*cos(rock)-dy*sin(rock),y:(GROUND+8)+dx*sin(rock)+dy*cos(rock)};}
-  push();translate(rp.x,rp.y);rotate(rock);
-  if(dancing(t)&&t<T_HEAD)rotate(radians(8*beatSway(t,1)));
-  const sq=1+0.12*beatHit(t);scale(sq,1/sq);
+  let x,y,w=104,h=58;
+  if(t<T_ARRANGE){const k=seg(t,E_SNARE,E_SNARE+1.3);
+    x=lerp(-120,250,k);y=GROUND-30+hop((k*5)%1,50);
+    if(t>E_SNARE+1.3){y=GROUND-30-14*beatHit(t);x=250+10*beatSway(t);}}
+  else{[x,y]=toLineup(t,250,GROUND-30,'snare');}
+  const dance=(t>=E_SNARE+1.3&&t<T_ARRANGE);
+  const turn=poseTurn(t);
+  push();translate(x,y);rotate(turn+(dance?radians(8*beatSway(t)):0));
+  const sq=1+0.12*beatHit(t)*(dance?1:0);scale(sq,1/sq);
   noStroke();
   fill(140,80,54);rect(-w/2,-h/2,w,h,6);
   fill(160,94,62);rect(-w/2,-h/2,w,h*0.4,6);
   fill(214,206,190);rect(-w/2-3,-h/2-5,w+6,10,4);rect(-w/2-3,h/2-5,w+6,10,4);
   fill(238,234,222);ellipse(0,-h/2,w,18);
-  if(t>T_HEAD+0.5){
-    if(alive){
-      // 墨镜(派对)
-      if(t>=T_SHADES){const dp=seg(t,T_SHADES,T_SHADES+0.4);
-        fill(30,34,44,255);rect(-26,-6,20,14,4);rect(6,-6,20,14,4);rect(-6,-2,12,3);
-        fill(120,200,230,180*dp);rect(-24,-4,8,5,2);rect(8,-4,8,5,2);
-        fill(238,150,120,120);ellipse(-34,12,13,8);ellipse(34,12,13,8);
-      }else{
-        fill(52,54,64);ellipse(-20,2,12,12);ellipse(20,2,12,12);
-        fill(255,255,255,220);circle(-17,-1,3.4);circle(23,-1,3.4);
-        fill(238,150,120,120);ellipse(-38,12,14,9);ellipse(38,12,14,9);
-      }
-    }else{stroke(52,54,64);strokeWeight(2.5);noFill();arc(-20,2,12,8,0.2,PI-0.2);arc(20,2,12,8,0.2,PI-0.2);}
+  if(t>=T_LINEUP-0.3){const wv=seg(t,T_LINEUP-0.3,T_LINEUP+0.3);
+    fill(52,54,64,255*wv);ellipse(-18,2,11,11);ellipse(18,2,11,11);
+    fill(255,255,255,220*wv);circle(-15,-1,3);circle(21,-1,3);
+    fill(238,150,120,120*wv);ellipse(-34,12,13,8);ellipse(34,12,13,8);}
+  pop();
+}
+
+// ================= 镲片(6.63进 + 7.3立起转圈) =================
+function drawCymbal(t){
+  if(t<E_CYM)return;
+  let x,y=GROUND-70,rot=-8,upright=0,spin=0;
+  if(t<T_SPIN){const k=seg(t,E_CYM,E_CYM+0.6);x=lerp(W+140,520,k);y=GROUND-26-40*sin(k*PI);}
+  else if(t<T_SPIN+1.6){ // 立起来转个圈(硬币竖立自转)
+    x=520;const k=seg(t,T_SPIN,T_SPIN+1.6);upright=sin(min(k,1)*PI)*1.0; // 起→落
+    upright=ez(min(k*1.3,1)); if(k>0.8)upright=1-ez((k-0.8)/0.2);       // 立起再躺回
+    y=GROUND-70-40*upright; spin=k*TWO_PI*3;}                            // 转三圈
+  else if(t<T_ARRANGE){x=520;y=GROUND-70; spin=0; upright=0;
+    y=GROUND-70-6*abs(sin(beatN(t)*PI)); rot=-8+10*sin(beatN(t)*TWO_PI);}
+  else{[x,y]=toLineup(t,520,GROUND-70,'cym');}
+  const turn=poseTurn(t);
+  push();translate(x,y);rotate(turn+radians(rot));
+  noStroke();
+  if(upright<0.25){
+    // 平躺
+    fill(214,176,96);ellipse(0,0,120,34);
+    fill(232,198,128);ellipse(0,-4,76,20);
+    fill(248,222,150);ellipse(0,-7,26,10);
+  }else{
+    // 立起的硬币自转:整体高度≈直径,宽度随 cos(spin) 收放(边缘朝我们时最细)
+    const diam=lerp(34,120,upright);            // 竖立后视高≈直径
+    const wfac=abs(cos(spin))*upright+(1-upright);
+    fill(214,176,96);ellipse(0,0,120*wfac,diam);
+    fill(232,198,128);ellipse(0,0,76*wfac,diam*0.62);
+    fill(248,222,150);ellipse(0,0,max(6,26*wfac),diam*0.2);
+    // 立起时的小影子
   }
   pop();
 }
 
-// ================= 镲片(帽子) =================
-function cymPos(t){
-  if(t<T_HAT){const k=seg(t,E_CYM,E_CYM+1.4);              // 飞盘旋入
-    let x=lerp(W+140,560,k),y=GROUND-26-70*sin(k*PI);
-    let rot=-8, spin=(1-k)*16;
-    if(t>E_CYM+1.4&&t<T_BREAK){rot=-8+12*sin(beatNum(t)*TWO_PI);y=GROUND-26-8*abs(sin(beatNum(t)*PI));} // 抖肩
-    return {x,y,rot,spin};}
-  const k=seg(t,T_HAT,T_HAT+1.0);                          // 飞上头顶当帽
-  return {x:lerp(560,CX+14,k),y:lerp(GROUND-26,HATY,k)-64*sin(k*PI),rot:lerp(-8,-12,k),spin:(1-k)*10};
-}
-function drawCymbal(t){
-  if(t<E_CYM)return;
-  const p=cymPos(t);
-  const rock=(t>=T_SHADES)?radians(4.5*sin((t-T_SHADES)*1.7)):0;
-  let x=p.x,y=p.y,rot=p.rot;
-  if(t>=T_HAT&&t>=T_SHADES){const dx=x-CX,dy=y-(GROUND+8);x=CX+dx*cos(rock)-dy*sin(rock);y=(GROUND+8)+dx*sin(rock)+dy*cos(rock);rot+=degrees(rock);}
-  push();translate(x,y);rotate(radians(rot)+(p.spin?sin(t*20)*0.12:0));
-  noStroke();
-  fill(214,176,96);ellipse(0,0,120,34);
-  fill(232,198,128);ellipse(0,-4,76,20);
-  fill(248,222,150);ellipse(0,-7,26,10);
-  if(t<T_BREAK&&t>=FIRST){const g=beatHit(t,2);if(g>0.4){noFill();stroke(255,232,170,150*g);strokeWeight(2);ellipse(0,0,132,42);}}
-  pop();
-}
-
-// ================= 鼓棒小人 =================
+// ================= 鼓棒小人(4.71走两步进 + 当摄影师) =================
 function drawStickBody(){
   const L=90;
   noStroke();fill(150,108,70);
   beginShape();vertex(-7,0);vertex(-5,-L);vertex(5,-L);vertex(7,0);endShape(CLOSE);
-  fill(214,170,120);
-  beginShape();vertex(-5.4,0);vertex(-3.8,-L);vertex(3.8,-L);vertex(5.4,0);endShape(CLOSE);
+  fill(214,170,120);beginShape();vertex(-5.4,0);vertex(-3.8,-L);vertex(3.8,-L);vertex(5.4,0);endShape(CLOSE);
   fill(220,176,128);ellipse(0,-L-9,22,20);
   fill(244,208,162);ellipse(-3,-L-13,10,7);
   fill(60,42,30);ellipse(-4,-L-9,5,5);ellipse(4,-L-9,5,5);
   fill(255,255,255,225);circle(-3,-L-10.3,1.6);circle(5,-L-10.3,1.6);
   fill(238,146,116,150);ellipse(-8,-L-5,5.5,3.5);ellipse(8,-L-5,5.5,3.5);
 }
-// A:左臂
+// 走两步:分段平移 + 每步一跳
+function walkTwoSteps(t,a,b,x0,x1){
+  const k=(t-a)/(b-a);
+  if(k<=0)return [x0,0];
+  if(k>=1)return [x1,0];
+  const step=Math.floor(k*2), fk=(k*2)%1;   // 两步
+  const x=lerp(x0,x1,(step+fk)/2);
+  return [x, hop(fk,20)];
+}
+// A:走进后跳,再当"被拍者"站左;负责推军鼓入位的动作在 arrange 段
 function drawStickA(t){
   if(t<E_STICKS)return;
-  let x,y,rot=0;
-  if(t<T_ARMS-0.6){
-    if(t<E_STICKS+1.4){const k=seg(t,E_STICKS,E_STICKS+1.4);x=lerp(-60,250,k);y=GROUND+8+hop((k*6)%1,26);} // 追跑入场
-    else{ // 原地扭跳
-      x=250+16*beatSway(t,1);y=GROUND+8+hop(((beatNum(t))%1+1)%1,22);rot=14*beatSway(t,1);}
-  }else{const k=seg(t,T_ARMS-0.6,T_ARMS);x=lerp(250,CX-92,k);y=lerp(GROUND+8,GROUND-BR-24,k)+hop(k,50);rot=lerp(0,58,k);}
-  const rock=(t>=T_SHADES)?radians(4.5*sin((t-T_SHADES)*1.7)):0;
-  if(t>=T_ARMS){const dx=x-CX,dy=y-(GROUND+8);x=CX+dx*cos(rock)-dy*sin(rock);y=(GROUND+8)+dx*sin(rock)+dy*cos(rock);rot+=degrees(rock);}
-  push();translate(x,y);rotate(radians(rot));drawStickBody();pop();
+  let x,y=GROUND+6,rot=0;
+  if(t<E_STICKS+1.6){const [wx,wy]=walkTwoSteps(t,E_STICKS,E_STICKS+1.6,-60,270);x=wx;y=GROUND+6+wy;}
+  else if(t<T_ARRANGE){x=270+14*beatSway(t);y=GROUND+6+hop(((beatN(t))%1+1)%1,20);rot=12*beatSway(t);}
+  else{[x,y]=toLineup(t,270,GROUND+6,'stkA');}
+  const turn=poseTurn(t);
+  push();translate(x,y);rotate(radians(rot)+turn);drawStickBody();pop();
 }
-// B:右臂(镜像,错半拍)
+// B:走进 → 跳舞 → 当摄影师(跑到相机、按下、跑回列队)
 function drawStickB(t){
-  if(t<E_STICKS+0.22)return;
-  let x,y,rot=0;
-  if(t<T_ARMS+0.4){
-    if(t<E_STICKS+1.62){const k=seg(t,E_STICKS+0.22,E_STICKS+1.62);x=lerp(-95,200,k);y=GROUND+8+hop((k*6)%1,26);}
-    else{const bp=((beatNum(t)+0.5)%1+1)%1;x=200-16*beatSway(t,1);y=GROUND+8+hop(bp,22);rot=-14*beatSway(t,1);}
-  }else{const k=seg(t,T_ARMS+0.4,T_ARMS+1.0);x=lerp(200,CX+92,k);y=lerp(GROUND+8,GROUND-BR-24,k)+hop(k,54);rot=lerp(0,-58,k);}
-  const rock=(t>=T_SHADES)?radians(4.5*sin((t-T_SHADES)*1.7)):0;
-  if(t>=T_ARMS+0.4){const dx=x-CX,dy=y-(GROUND+8);x=CX+dx*cos(rock)-dy*sin(rock);y=(GROUND+8)+dx*sin(rock)+dy*cos(rock);rot+=degrees(rock);}
-  push();translate(x,y);rotate(radians(rot));drawStickBody();pop();
+  if(t<E_STICKS+0.24)return;
+  let x,y=GROUND+6,rot=0,extra=null;
+  if(t<E_STICKS+1.84){const [wx,wy]=walkTwoSteps(t,E_STICKS+0.24,E_STICKS+1.84,-95,205);x=wx;y=GROUND+6+wy;}
+  else if(t<T_ARRANGE){const bp=((beatN(t)+0.5)%1+1)%1;x=205-14*beatSway(t);y=GROUND+6+hop(bp,20);rot=-12*beatSway(t);}
+  else if(t<T_ARRANGE+1.4){const k=seg(t,T_ARRANGE,T_ARRANGE+1.4);   // 跑向相机
+    x=lerp(205,POS.cam[0]+60,k);y=GROUND+6+hop((k*3)%1,26);}
+  else if(t<T_LINEUP){const k=seg(t,T_ARRANGE+1.6,T_LINEUP);         // 按下自拍→跑回列队
+    x=lerp(POS.cam[0]+60,POS.stkB[0],k);y=GROUND+6+hop((k*3)%1,26);extra='press';}
+  else{[x,y]=toLineup(t,POS.stkB[0],GROUND+6,'stkB');}
+  const turn=poseTurn(t);
+  push();translate(x,y);rotate(radians(rot)+turn);drawStickBody();pop();
 }
 
-// ================= 派对亮片 =================
-let confetti=[];
-function partySparkle(t){
-  if(confetti.length<40&&random()<0.4)
-    confetti.push({x:random(W),y:-10,vx:random(-20,20),vy:random(60,120),
-      c:[random(255),random(255),random(255)],r:random(4,8),age:0,rot:random(TWO_PI),vr:random(-4,4)});
-  confetti=confetti.filter(c=>{c.age+=deltaTime/1000;c.x+=c.vx*deltaTime/1000;c.y+=c.vy*deltaTime/1000;c.rot+=c.vr*deltaTime/1000;return c.y<H+20;});
-  for(const c of confetti){push();translate(c.x,c.y);rotate(c.rot);
-    noStroke();fill(c.c[0],c.c[1],c.c[2],220);rect(-c.r/2,-c.r/2,c.r,c.r*0.6,1);pop();}
-  // 墨镜反光 glint
+// ================= 拍立得相机 + 照片 =================
+function drawCamera(t){
+  if(t<T_ARRANGE+0.6)return;
+  const [cx,cy]=POS.cam;
+  const app=seg(t,T_ARRANGE+0.6,T_ARRANGE+1.4);
+  push();translate(cx,cy+ (1-app)*40);
+  // 三脚架
+  stroke(60,64,72);strokeWeight(6);
+  line(-4,20,-40,100);line(4,20,40,100);line(0,22,0,100);
+  // 机身
+  noStroke();fill(60,66,78);rect(-46,-26,92,52,10);
+  fill(40,46,58);rect(-46,-26,92,16,8);
+  // 镜头
+  fill(20,24,32);circle(0,4,34);fill(90,150,180);circle(0,4,22);fill(200,230,240,180);circle(-5,-1,7);
+  // 红灯(自拍闪)
+  const blink=(t>=T_ARRANGE+2&&t<T_FLASH)?(sin(t*12)>0?1:0.2):(t>=T_FLASH?1:0.4);
+  fill(230,60,50,255*blink);circle(34,-16,7);
+  pop();
+}
+function drawPolaroid(t){
+  if(t<T_POLA)return;
+  const rise=seg(t,T_POLA,T_POLA+1.4);
+  const x=CX, y=lerp(POS.cam[1]-10,GROUND-260,rise);
+  const rot=radians(-6+8*rise);
+  push();translate(x,y);rotate(rot);scale(1+0.1*rise);
+  // 卡片
+  noStroke();fill(255);rect(-92,-112,184,224,6);
+  fill(248,248,244);rect(-92,72,184,40);
+  // 照片区(显影:从暗到亮)
+  const dev=seg(t,T_POLA+0.4,T_POLA+1.6);
+  push();translate(0,-16);
+  // 迷你海滩
+  fill(lerpColor(color(40,50,70),color(120,200,225),dev));rect(-80,-88,160,120);
+  fill(lerpColor(color(30,40,60),color(240,224,170),dev));rect(-80,20,160,12);
+  // 迷你乐队剪影
+  fill(lerpColor(color(20,26,40),color(250,250,252),dev));circle(-6,8,44);      // 底鼓
+  fill(lerpColor(color(20,26,40),color(150,100,66),dev));rect(-44,2,26,16,3);   // 军鼓
+  fill(lerpColor(color(20,26,40),color(226,196,128),dev));ellipse(40,6,40,12);  // 镲
+  fill(lerpColor(color(20,26,40),color(214,170,120),dev));rect(-16,18,7,20);rect(12,18,7,20); // 棒
+  // 小太阳
+  fill(lerpColor(color(30,40,60),color(255,246,196),dev));circle(52,-64,26);
+  pop();
+  // 手写字
+  if(dev>0.7){fill(90,90,110,255*dev);textAlign(CENTER);textStyle(BOLD);textSize(18);
+    text('the band ♪',0,98);}
+  pop();
 }
 </script>
 </body>
