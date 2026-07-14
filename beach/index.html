@@ -87,7 +87,12 @@ function setup(){
   createCanvas(W*s,H*s);frameRate(60);
   seekParam=getParam('seek');if(seekParam!==null)seekParam=parseFloat(seekParam);
   wallStart=performance.now()/1000;
-  if(seekParam===null)initAudio();
+  if(seekParam===null){initAudio();
+    // 任意位置轻触都从头带声播(在手势内 resume,保证一定出声)
+    const kick=()=>{if(seekParam===null)startTake();};
+    window.addEventListener('pointerdown',kick);
+    window.addEventListener('touchstart',kick);
+  }
   randomSeed(7);
   for(let i=0;i<340;i++)grain.push({x:random(W),y:random(GROUND+2,H),a:random(30,80),d:random()<0.5});
   for(let i=0;i<50;i++)seaSpark.push({x:random(W),y:random(SEA+8,GROUND-8),ph:random(TWO_PI),sp:random(0.6,1.6)});
